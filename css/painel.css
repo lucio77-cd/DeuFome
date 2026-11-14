@@ -1,0 +1,32 @@
+/* Deu Fome — componentes dos painéis da Etapa 1 */
+.painel-container { max-width: 920px; padding-top: 22px; padding-bottom: 40px; }
+.topo-secundario { font-weight: 500; opacity: .85; }
+.painel-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 8px 0 20px; }
+.painel-cabecalho h1 { margin-bottom: 6px; }
+.sobretitulo { color: var(--cor-primaria); font-size: .72rem; font-weight: 800; letter-spacing: .12em; margin-bottom: 6px; }
+.linha-titulo, .item-lista, .botoes-form { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.item-lista { padding: 12px 0; border-bottom: 1px solid var(--cor-borda); }
+.item-lista:last-child { border-bottom: 0; }
+.item-lista small { display: block; color: var(--cor-texto-suave); overflow-wrap: anywhere; margin-top: 3px; }
+.btn-pequeno { min-height: 34px; padding: 5px 10px; font-size: .86rem; white-space: nowrap; }
+.form-linha { display: flex; align-items: flex-end; gap: 10px; }
+.form-linha .campo { flex: 1; }
+.grade-dois { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.check-linha { display: flex; align-items: center; gap: 9px; margin: 8px 0 16px; }
+.check-linha input { width: 20px; min-height: 20px; margin: 0; accent-color: var(--cor-primaria); }
+.acoes-item { display: flex; gap: 6px; }
+.mensagem { min-height: 1.2em; margin: 10px 0 0; font-size: .92rem; }
+.mensagem.erro { color: var(--cor-erro); }
+.mensagem.sucesso { color: var(--cor-sucesso); }
+.mensagem.aviso { color: #8a6100; background: #fff1cc; padding: 12px; border-radius: var(--raio); }
+.link-voltar { display: inline-block; margin: 8px 0 20px; }
+@media (max-width: 560px) {
+  .painel-cabecalho { align-items: flex-start; }
+  .painel-cabecalho .btn { min-height: 38px; padding: 7px 11px; }
+  .form-linha { align-items: stretch; flex-direction: column; }
+  .form-linha .btn { width: 100%; }
+  .grade-dois { grid-template-columns: 1fr; gap: 0; }
+  .produto-linha { align-items: flex-start; flex-direction: column; }
+  .acoes-item { width: 100%; }
+  .acoes-item .btn { flex: 1; }
+}
