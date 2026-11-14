@@ -152,3 +152,36 @@ export function mensagemErroFirebase(erro) {
   };
   return mapa[codigo] || (erro && erro.message) || "Erro desconhecido.";
 }
+
+// Cria um elemento sem usar innerHTML: criar("div", { class: "x", texto: "oi" }, filho1, filho2)
+// Atributos especiais: class, texto (textContent) e data-*; o resto vira propriedade (type, value...)
+export function criar(tag, atributos = {}, ...filhos) {
+  const no = document.createElement(tag);
+  for (const [chave, valor] of Object.entries(atributos)) {
+    if (chave === "class") no.className = valor;
+    else if (chave === "texto") no.textContent = valor;
+    else if (chave.startsWith("data-")) no.setAttribute(chave, valor);
+    else no[chave] = valor;
+  }
+  no.append(...filhos);
+  return no;
+}
+
+// Botão que enviou o formulário (com alternativa para navegadores antigos)
+export function botaoDe(evento) {
+  return evento.submitter || evento.target.querySelector("[type=submit]");
+}
+
+// Desabilita o botão enquanto a tarefa roda (evita clique duplo gravando duas vezes)
+// e mostra qualquer erro como aviso na tela.
+export async function executar(botao, tarefa) {
+  if (botao.disabled) return;
+  botao.disabled = true;
+  try {
+    await tarefa();
+  } catch (erro) {
+    toast(mensagemErroFirebase(erro), "erro");
+  } finally {
+    botao.disabled = false;
+  }
+}

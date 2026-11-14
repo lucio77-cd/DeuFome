@@ -3,7 +3,7 @@
 // aqui ficam as validações de tela e o cuidado para nunca misturar dados de dois restaurantes.
 
 import { auth, db } from "./firebase-config.js";
-import { $, mensagemErroFirebase, paraCentavos, centavosParaTexto, formatarMoeda, toast } from "./utils.js";
+import { $, criar, botaoDe, executar, mensagemErroFirebase, paraCentavos, centavosParaTexto, formatarMoeda, toast } from "./utils.js";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -18,35 +18,6 @@ let categorias = [];
 let produtos = [];
 
 // ---------- Utilitários de tela ----------
-function criar(tag, atributos = {}, ...filhos) {
-  const no = document.createElement(tag);
-  for (const [chave, valor] of Object.entries(atributos)) {
-    if (chave === "class") no.className = valor;
-    else if (chave === "texto") no.textContent = valor;
-    else if (chave.startsWith("data-")) no.setAttribute(chave, valor);
-    else no[chave] = valor;
-  }
-  no.append(...filhos);
-  return no;
-}
-
-function botaoDe(evento) {
-  return evento.submitter || evento.target.querySelector("[type=submit]");
-}
-
-// Desabilita o botão enquanto a tarefa roda (evita clique duplo gravando duas vezes)
-async function executar(botao, tarefa) {
-  if (botao.disabled) return;
-  botao.disabled = true;
-  try {
-    await tarefa();
-  } catch (erro) {
-    toast(mensagemErroFirebase(erro), "erro");
-  } finally {
-    botao.disabled = false;
-  }
-}
-
 // Enquanto carrega, o conteúdo fica bloqueado: ninguém salva com dados de outro restaurante na tela
 function ocupado(ligado) {
   const area = $("#conteudo");
