@@ -15,6 +15,25 @@ service cloud.firestore {
     function canManageRestaurant(restauranteId) {
       return isMaster() || isMember(restauranteId);
     }
+    function validRestaurantData(data) {
+      return data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 80
+        && data.taxaEntregaCentavos is int && data.taxaEntregaCentavos >= 0
+        && data.horarioAbertura is string && data.horarioFechamento is string
+        && data.aberto is bool;
+    }
+    function validCategory(data) {
+      return data.keys().hasOnly(['nome', 'ativo', 'ordem', 'criadoEm'])
+        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 45
+        && data.ativo is bool && data.ordem is int;
+    }
+    function validProduct(data) {
+      return data.keys().hasOnly(['nome', 'descricao', 'precoCentavos', 'categoriaId', 'disponivel', 'criadoEm', 'atualizadoEm'])
+        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 80
+        && data.descricao is string && data.descricao.size() <= 240
+        && data.precoCentavos is int && data.precoCentavos > 0
+        && data.categoriaId is string && data.categoriaId.size() > 0
+        && data.disponivel is bool;
+    }
 
     match /restaurantes/{restauranteId} {
       allow read: if isMaster() || isMember(restauranteId);
@@ -22,17 +41,24 @@ service cloud.firestore {
       allow update: if isMaster()
         || (isMember(restauranteId)
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['nome', 'taxaEntregaCentavos', 'horarioAbertura', 'horarioFechamento', 'aberto', 'atualizadoEm']));
+            .hasOnly(['nome', 'taxaEntregaCentavos', 'horarioAbertura', 'horarioFechamento', 'aberto', 'atualizadoEm'])
+          && validRestaurantData(request.resource.data));
 
       match /membros/{uid} {
         allow read: if isMaster() || (signedIn() && request.auth.uid == uid);
         allow create, update, delete: if isMaster();
       }
       match /categorias/{categoriaId} {
-        allow read, write: if canManageRestaurant(restauranteId);
+        allow read: if canManageRestaurant(restauranteId);
+        allow create: if canManageRestaurant(restauranteId) && validCategory(request.resource.data);
+        allow update: if canManageRestaurant(restauranteId) && validCategory(request.resource.data);
+        allow delete: if canManageRestaurant(restauranteId);
       }
       match /produtos/{produtoId} {
-        allow read, write: if canManageRestaurant(restauranteId);
+        allow read: if canManageRestaurant(restauranteId);
+        allow create: if canManageRestaurant(restauranteId) && validProduct(request.resource.data);
+        allow update: if canManageRestaurant(restauranteId) && validProduct(request.resource.data);
+        allow delete: if canManageRestaurant(restauranteId);
       }
       match /configuracoes/{configId} {
         allow read, write: if canManageRestaurant(restauranteId);
@@ -44,7 +70,6 @@ service cloud.firestore {
       allow create, update, delete: if isMaster();
     }
 
-    // Coleções globais antigas permanecem bloqueadas; os dados agora são isolados por restaurante.
     match /config/{docId} { allow read, write: if false; }
     match /categorias/{id} { allow read, write: if false; }
     match /produtos/{id} { allow read, write: if false; }
