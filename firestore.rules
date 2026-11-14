@@ -1,18 +1,20 @@
 rules_version = '2';
 
-// Deu Fome — regras do Firestore (Etapa 2: cardápio público + multi-restaurante)
+// Deu Fome — regras do Firestore (Etapa 3: pedidos)
 // Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar
 //
 // Modelo:
-//   restaurantes/{id}                      dados e configurações do restaurante (leitura pública só se ativo)
+//   restaurantes/{id}                      dados e configurações (leitura pública só se ativo)
 //   restaurantes/{id}/membros/{uid}        quem pode gerenciar (criado só pelo Mestre)
 //   restaurantes/{id}/categorias/{id}      categorias do cardápio (leitura pública só se ativas)
 //   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
+//   restaurantes/{id}/pedidos/{id}         pedidos: CRIADOS SÓ PELO SERVIDOR (/api/criar-pedido)
+//   restaurantes/{id}/contadores/...       número sequencial dos pedidos (só o servidor; negado aqui)
 //   usuarios/{uid}/restaurantes/{id}       índice privado de vínculos (escrito só pelo Mestre)
+//   _limites/...                           controle de abuso do servidor (negado aqui)
 //
-// Leitura pública (sem login): somente restaurante ativo, e dentro dele categorias e produtos com
-// ativo == true. As telas do cliente consultam com where("ativo", "==", true), que é o que as
-// regras exigem para permitir a listagem.
+// Pedido: quem tem o endereço do pedido (ID aleatório de 24 caracteres) lê só aquele pedido ("get").
+// Listar pedidos é só do restaurante/Mestre. O restaurante só altera status (com transições válidas).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -46,6 +48,13 @@ service cloud.firestore {
     // "HH:MM" de 00:00 a 23:59 (a virada da meia-noite é permitida: abre 18:00, fecha 02:00)
     function validHora(valor) {
       return valor is string && valor.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    // Andamento do pedido: novo > preparando > saiu_para_entrega > entregue; cancelar até sair entregue
+    function transicaoValida(de, para) {
+      return (de == 'novo' && (para == 'preparando' || para == 'cancelado'))
+        || (de == 'preparando' && (para == 'saiu_para_entrega' || para == 'cancelado'))
+        || (de == 'saiu_para_entrega' && (para == 'entregue' || para == 'cancelado'));
     }
 
     // ---------- Validações de dados ----------
@@ -122,6 +131,22 @@ service cloud.firestore {
         // Produto não é apagado pelo painel (fica "arquivado": ativo = false), para o histórico de pedidos
         allow delete: if isMaster();
       }
+
+      match /pedidos/{pedidoId} {
+        // Cliente lê só o próprio pedido (precisa saber o ID aleatório); não consegue listar os pedidos
+        allow get: if true;
+        // Restaurante (e Mestre) listam e acompanham todos os pedidos do restaurante
+        allow list: if canManageRestaurant(restauranteId);
+        // Pedido NUNCA é criado pelo navegador: só o servidor (conta de serviço ignora estas regras)
+        allow create: if false;
+        // Restaurante só muda o status, seguindo o andamento válido
+        allow update: if canManageRestaurant(restauranteId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm'])
+          && request.resource.data.status is string
+          && transicaoValida(resource.data.status, request.resource.data.status)
+          && request.resource.data.atualizadoEm == request.time;
+        allow delete: if false;
+      }
     }
 
     // ---------- Índice de vínculos do usuário ----------
@@ -135,7 +160,7 @@ service cloud.firestore {
       allow read, write: if isMaster();
     }
 
-    // ---------- Todo o resto negado ----------
+    // ---------- Todo o resto negado (inclui contadores e _limites, usados só pelo servidor) ----------
     match /{document=**} {
       allow read, write: if false;
     }
