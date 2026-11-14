@@ -1,46 +1,53 @@
 # Deu Fome 🍔
 
-App de pedido e entrega para Treze Tílias (SC). Versão beta com **HTML/CSS/JavaScript puro**, **Firebase** (Firestore + Auth) e deploy na **Vercel**.
+Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída com HTML, CSS e JavaScript modular, Firebase Authentication, Firestore e Vercel.
 
-## Estrutura
+## Etapa 1 — Painéis e cardápio
 
-```
-.
-├── index.html            # Página inicial (placeholder da Etapa 0)
-├── diagnostico.html      # Testa Firebase, regras e login do restaurante
-├── css/
-│   └── base.css          # Estilos base (mobile-first)
-├── js/
-│   ├── firebase-config.js  # Inicialização do Firebase (app, auth, db)
-│   └── utils.js            # Moeda, datas, telefone, toast, erros em português
-├── firestore.rules       # Regras do banco (colar no Console do Firebase)
-├── vercel.json           # Cabeçalhos de segurança e URLs limpas
-└── .gitignore
-```
+- Área do Mestre: cadastra restaurantes e vincula o UID do responsável.
+- Área do restaurante: configura nome, taxa, horário e status aberto/fechado.
+- Cardápio: cadastro, edição e exclusão de categorias e produtos.
+- Isolamento multi-restaurante: cada conta acessa somente os restaurantes vinculados a ela.
+- Valores monetários armazenados em centavos (inteiros).
 
-## Configuração (Etapa 0)
+## Configuração necessária no Firebase
 
-1. **Firebase Console** > Configurações do projeto > app da Web: copie `apiKey`, `messagingSenderId` e `appId` para `js/firebase-config.js` (campos `COLE_AQUI`).
-2. **Authentication** > Método de login: ative **E-mail/senha**.
-3. **Firestore Database** > Regras: cole o conteúdo de `firestore.rules` e clique em **Publicar**.
-4. **Vercel**: importe este repositório (framework: *Other*, sem build). Depois adicione o domínio da Vercel em Authentication > Configurações > Domínios autorizados.
-5. Abra `/diagnostico` no site e confira se todos os testes estão **OK**.
+1. Em Authentication → Sign-in method, ative E-mail/senha.
+2. Em Authentication → Users, crie a conta do responsável por cada restaurante. Copie o UID exibido no Firebase e cole no painel Mestre.
+3. Publique o conteúdo de firestore.rules em Firestore Database → Regras.
+4. Confira se o UID Mestre em admin/admin.js e firestore.rules corresponde à conta principal.
+5. Faça deploy da branch etapa-1-painel-restaurante na Vercel para testar antes de integrar à main.
 
-## Decisões
+## Fluxo de cadastro
 
-- Valores em dinheiro são guardados em **centavos** (inteiro).
-- Projeto Firebase próprio: `deu-fome-fd2e8` (separado dos outros sistemas).
-- Admin (dono do restaurante) identificado pelo UID no `firestore.rules`.
-- Pedidos só são criados por usuário logado, com `clienteId` igual ao próprio UID e `status` inicial `novo`.
+1. O Mestre entra em /admin/.
+2. Cria a conta do responsável no Firebase Authentication (Console).
+3. Informa o nome do restaurante e o UID do responsável no painel.
+4. O painel grava restaurante, associação de membro e índice privado do usuário em uma única operação atômica.
+5. O responsável entra em /painel/ e administra seu cardápio.
 
-## Etapas
+## Estrutura Firestore
 
-- [x] **Etapa 0** — Fundação
-- [ ] Etapa 1 — Cadastro do restaurante e cardápio
-- [ ] Etapa 2 — Tela do cliente e praça de alimentação
-- [ ] Etapa 3 — Pedidos em tempo real
-- [ ] Etapa 4 — Receitas, custos, cupons e dashboard
+- restaurantes/{restauranteId} — dados gerais e configurações.
+- restaurantes/{restauranteId}/membros/{uid} — associação criada somente pelo Mestre.
+- restaurantes/{restauranteId}/categorias/{categoriaId} — categorias do cardápio.
+- restaurantes/{restauranteId}/produtos/{produtoId} — produtos e preços em centavos.
+- usuarios/{uid}/restaurantes/{restauranteId} — índice privado dos restaurantes vinculados ao usuário.
 
-## Limitação conhecida
+As regras negam acesso às antigas coleções globais categorias e produtos. Os novos dados ficam dentro do restaurante correspondente.
 
-As regras garantem quem pode criar um pedido, mas não conferem o **total** nem os preços dele, porque isso não dá para validar só nas regras. Vale tratar na Etapa 3.
+## Segurança e limites desta versão
+
+- O UID Mestre está fixado nas regras e no painel; deve corresponder à conta principal correta.
+- O vínculo de usuário a restaurante só pode ser criado pelo Mestre.
+- O painel não cria contas Authentication de terceiros, evitando credenciais administrativas no navegador.
+- Ainda não inclui cardápio público, carrinho, pedidos, pagamentos, cupons ou API server-side.
+- Antes do beta público, revisar as regras com testes no Firebase Emulator e validar o fluxo com duas contas distintas.
+
+## Estrutura principal
+
+- admin/ — Painel do Mestre.
+- painel/ — Painel do restaurante.
+- css/ — Estilos compartilhados e dos painéis.
+- js/ — Configuração Firebase e utilitários.
+- firestore.rules — Regras de segurança.
