@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Diagnóstico — Deu Fome</title>
+  <link rel="stylesheet" href="css/base.css">
+  <style>
+    .teste { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--cor-borda); }
+    .teste:last-child { border-bottom: 0; }
+    .teste small { display: block; color: var(--cor-texto-suave); word-break: break-word; }
+  </style>
+</head>
+<body>
+  <header class="topo">🔧 Diagnóstico</header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Testes automáticos</h2>
+      <div id="lista"></div>
+      <button id="btnRodar" class="btn btn-bloco" type="button">Rodar testes de novo</button>
+    </section>
+
+    <section class="card">
+      <h2>Login do restaurante</h2>
+      <p class="texto-suave">Entre com a conta do dono para testar a escrita de administrador.</p>
+      <div id="areaLogin">
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" autocomplete="username" placeholder="email@exemplo.com">
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input id="senha" type="password" autocomplete="current-password">
+        </div>
+        <button id="btnEntrar" class="btn btn-bloco" type="button">Entrar</button>
+      </div>
+      <div id="areaLogado" class="oculto">
+        <p>Logado como <strong id="usuarioEmail"></strong></p>
+        <p class="texto-suave">UID: <span id="usuarioUid"></span></p>
+        <button id="btnSair" class="btn btn-secundario btn-bloco" type="button">Sair</button>
+      </div>
+    </section>
+
+    <a class="btn btn-secundario btn-bloco" href="./">Voltar ao início</a>
+  </main>
+
+  <script type="module">
+    import { configPreenchida, firebaseConfig, auth, db, FIREBASE_VERSION } from "./js/firebase-config.js";
+    import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { $, escapeHtml, toast, mensagemErroFirebase } from "./js/utils.js";
+
+    const lista = $("#lista");
+
+    function mostrar(nome, estado, detalhe) {
+      const selo = estado === "ok" ? ["selo-ok", "OK"] : estado === "aviso" ? ["selo-aviso", "ATENÇÃO"] : ["selo-erro", "FALHA"];
+      const linha = document.createElement("div");
+      linha.className = "teste";
+      linha.innerHTML = `<div><strong>${escapeHtml(nome)}</strong><small>${escapeHtml(detalhe || "")}</small></div><span class="selo ${selo[0]}">${selo[1]}</span>`;
+      lista.appendChild(linha);
+    }
+
+    async function rodarTestes() {
+      lista.innerHTML = "";
+
+      // 1. Configuração preenchida
+      if (configPreenchida) {
+        mostrar("Configuração do Firebase", "ok", `projectId: ${firebaseConfig.projectId} (SDK ${FIREBASE_VERSION})`);
+      } else {
+        mostrar("Configuração do Firebase", "erro", "Existem campos COLE_AQUI em js/firebase-config.js. Preencha apiKey, messagingSenderId e appId.");
+        return; // sem config, os demais testes não fazem sentido
+      }
+
+      // 2. Leitura pública (config/restaurante) — não precisa existir, só precisa ser permitida
+      try {
+        const snap = await getDoc(doc(db, "config", "restaurante"));
+        mostrar("Firestore: leitura pública", "ok", snap.exists() ? "Documento config/restaurante encontrado." : "Conectou; config/restaurante ainda não existe (normal na Etapa 0).");
+      } catch (e) {
+        mostrar("Firestore: leitura pública", "erro", mensagemErroFirebase(e));
+      }
+
+      // 3. Escrita sem login deve ser NEGADA
+      if (!auth.currentUser) {
+        try {
+          await setDoc(doc(db, "_diagnostico", "anonimo"), { ts: serverTimestamp() });
+          mostrar("Regras: bloqueio sem login", "erro", "A escrita sem login foi aceita! Revise o firestore.rules publicado.");
+          try { await deleteDoc(doc(db, "_diagnostico", "anonimo")); } catch (_) {}
+        } catch (e) {
+          if (e.code === "permission-denied") {
+            mostrar("Regras: bloqueio sem login", "ok", "Escrita sem login negada, como esperado.");
+          } else {
+            mostrar("Regras: bloqueio sem login", "aviso", mensagemErroFirebase(e));
+          }
+        }
+        mostrar("Escrita de administrador", "aviso", "Faça login abaixo com a conta do restaurante para testar.");
+      } else {
+        // 4. Escrita de admin
+        try {
+          const ref = doc(db, "_diagnostico", "ping");
+          await setDoc(ref, { ts: serverTimestamp(), uid: auth.currentUser.uid });
+          await deleteDoc(ref);
+          mostrar("Escrita de administrador", "ok", "Gravou e apagou _diagnostico/ping.");
+        } catch (e) {
+          mostrar("Escrita de administrador", "erro", e.code === "permission-denied"
+            ? "Negado. Este UID não é o admin definido no firestore.rules."
+            : mensagemErroFirebase(e));
+        }
+      }
+    }
+
+    // Login
+    $("#btnEntrar").addEventListener("click", async () => {
+      const email = $("#email").value.trim();
+      const senha = $("#senha").value;
+      if (!email || !senha) { toast("Informe e-mail e senha.", "aviso"); return; }
+      try {
+        await signInWithEmailAndPassword(auth, email, senha);
+        $("#senha").value = "";
+        toast("Login feito.", "sucesso");
+      } catch (e) {
+        toast(mensagemErroFirebase(e), "erro");
+      }
+    });
+
+    $("#btnSair").addEventListener("click", () => signOut(auth));
+    $("#btnRodar").addEventListener("click", rodarTestes);
+
+    onAuthStateChanged(auth, (user) => {
+      $("#areaLogin").classList.toggle("oculto", !!user);
+      $("#areaLogado").classList.toggle("oculto", !user);
+      if (user) {
+        $("#usuarioEmail").textContent = user.email || "(sem e-mail)";
+        $("#usuarioUid").textContent = user.uid;
+      }
+      rodarTestes();
+    });
+  </script>
+</body>
+</html>
