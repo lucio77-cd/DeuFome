@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
   <meta name="theme-color" content="#e8451e"><title>Painel do restaurante — Deu Fome</title>
   <link rel="stylesheet" href="../css/base.css"><link rel="stylesheet" href="../css/painel.css">
 </head>
@@ -16,44 +17,55 @@
       <button class="btn btn-bloco" type="submit">Entrar</button>
     </form><p id="loginErro" class="mensagem erro" aria-live="polite"></p>
   </section>
+
   <div id="app" class="oculto">
-    <section class="painel-cabecalho"><div><p class="sobretitulo">ÁREA DO RESTAURANTE</p><h1 id="tituloRestaurante">Seu estabelecimento</h1><p class="texto-suave">Gerencie informações e cardápio.</p></div><button id="sair" class="btn btn-secundario">Sair</button></section>
+    <section class="painel-cabecalho"><div><p class="sobretitulo">ÁREA DO RESTAURANTE</p><h1 id="tituloRestaurante">Seu estabelecimento</h1><p class="texto-suave">Gerencie informações e cardápio.</p></div><button id="sair" class="btn btn-secundario" type="button">Sair</button></section>
+
+    <section id="semVinculo" class="card mensagem aviso oculto">Peça ao Mestre para vincular seu usuário a um restaurante.</section>
+    <section id="erroCarga" class="card mensagem erro oculto">Não foi possível carregar os dados. <button id="tentarDeNovo" class="btn btn-secundario btn-pequeno" type="button">Tentar de novo</button></section>
     <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Escolha o restaurante</label><select id="seletorRestaurante"></select></section>
-    <section class="card">
-      <h2>Configurações</h2>
-      <form id="configForm">
-        <div class="campo"><label for="nomeRestaurante">Nome</label><input id="nomeRestaurante" maxlength="80" required></div>
-        <div class="grade-dois">
-          <div class="campo"><label for="taxa">Taxa de entrega (R$)</label><input id="taxa" inputmode="decimal" placeholder="0,00" required></div>
-          <div class="campo"><label for="abertura">Abre às</label><input id="abertura" type="time" required></div>
-          <div class="campo"><label for="fechamento">Fecha às</label><input id="fechamento" type="time" required></div>
-        </div>
-        <label class="check-linha"><input id="aberto" type="checkbox"> Restaurante aberto para pedidos</label>
-        <button class="btn btn-bloco" type="submit">Salvar configurações</button>
-      </form>
-    </section>
-    <section class="card">
-      <h2>Categorias do cardápio</h2>
-      <form id="categoriaForm" class="form-linha"><div class="campo"><label for="categoriaNome">Nova categoria</label><input id="categoriaNome" maxlength="45" required placeholder="Ex.: Lanches"></div><button class="btn" type="submit">Adicionar</button></form>
-      <div id="listaCategorias"></div>
-    </section>
-    <section class="card">
-      <h2>Produtos</h2>
-      <form id="produtoForm">
-        <input id="produtoId" type="hidden">
-        <div class="campo"><label for="produtoNome">Nome do produto</label><input id="produtoNome" maxlength="80" required placeholder="Ex.: X-salada"></div>
-        <div class="campo"><label for="produtoDescricao">Descrição (opcional)</label><textarea id="produtoDescricao" rows="2" maxlength="240" placeholder="Ingredientes e detalhes"></textarea></div>
-        <div class="grade-dois">
-          <div class="campo"><label for="produtoPreco">Preço (R$)</label><input id="produtoPreco" inputmode="decimal" required placeholder="0,00"></div>
-          <div class="campo"><label for="produtoCategoria">Categoria</label><select id="produtoCategoria" required></select></div>
-        </div>
-        <label class="check-linha"><input id="produtoDisponivel" type="checkbox" checked> Disponível</label>
-        <div class="botoes-form"><button class="btn" type="submit" id="salvarProduto">Salvar produto</button><button class="btn btn-secundario oculto" type="button" id="cancelarEdicao">Cancelar edição</button></div>
-      </form>
-      <div id="listaProdutos"></div>
-    </section>
+
+    <div id="conteudo" class="oculto">
+      <section class="card">
+        <h2>Configurações</h2>
+        <form id="configForm">
+          <div class="campo"><label for="nomeRestaurante">Nome</label><input id="nomeRestaurante" maxlength="80" required></div>
+          <div class="grade-dois">
+            <div class="campo"><label for="taxa">Taxa de entrega (R$)</label><input id="taxa" inputmode="decimal" placeholder="0,00" required></div>
+            <div class="campo"><label for="abertura">Abre às</label><input id="abertura" type="time" required></div>
+            <div class="campo"><label for="fechamento">Fecha às</label><input id="fechamento" type="time" required></div>
+          </div>
+          <p id="dicaHorario" class="texto-suave" aria-live="polite"></p>
+          <label class="check-linha"><input id="aberto" type="checkbox"> Aceitando pedidos agora (desmarque para pausar tudo)</label>
+          <button class="btn btn-bloco" type="submit">Salvar configurações</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Categorias do cardápio</h2>
+        <form id="categoriaForm" class="form-linha"><div class="campo"><label for="categoriaNome">Nova categoria</label><input id="categoriaNome" maxlength="45" required placeholder="Ex.: Lanches"></div><button class="btn" type="submit">Adicionar</button></form>
+        <div id="listaCategorias"></div>
+      </section>
+
+      <section class="card">
+        <h2>Produtos</h2>
+        <form id="produtoForm">
+          <input id="produtoId" type="hidden">
+          <div class="campo"><label for="produtoNome">Nome do produto</label><input id="produtoNome" maxlength="80" required placeholder="Ex.: X-salada"></div>
+          <div class="campo"><label for="produtoDescricao">Descrição (opcional)</label><textarea id="produtoDescricao" rows="2" maxlength="240" placeholder="Ingredientes e detalhes"></textarea></div>
+          <div class="grade-dois">
+            <div class="campo"><label for="produtoPreco">Preço (R$)</label><input id="produtoPreco" inputmode="decimal" required placeholder="0,00"></div>
+            <div class="campo"><label for="produtoCategoria">Categoria</label><select id="produtoCategoria" required></select></div>
+          </div>
+          <label class="check-linha"><input id="produtoDisponivel" type="checkbox" checked> Disponível</label>
+          <div class="botoes-form"><button class="btn" type="submit" id="salvarProduto">Salvar produto</button><button class="btn btn-secundario oculto" type="button" id="cancelarEdicao">Cancelar edição</button></div>
+        </form>
+        <div id="blocoArquivados" class="oculto"><label class="check-linha"><input id="mostrarArquivados" type="checkbox"> <span id="rotuloArquivados">Mostrar arquivados</span></label></div>
+        <div id="listaProdutos"></div>
+      </section>
+    </div>
   </div>
   <a class="link-voltar" href="../">Voltar ao início</a>
 </main>
-<script type="module" src="./painel.js"></script>
+<script type="module" src="../js/painel.js"></script>
 </body></html>
