@@ -14,7 +14,8 @@
 <main class="container">
   <section class="card"><h2>Testes automáticos</h2><div id="lista"></div><button id="btnRodar" class="btn btn-bloco" type="button">Rodar testes novamente</button></section>
   <section class="card">
-    <h2>Login do Mestre</h2>
+    <h2>Login</h2>
+    <p class="texto-suave">Rode sem login, depois com a conta Mestre e depois com a conta de um restaurante.</p>
     <div id="areaLogin">
       <div class="campo"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username"></div>
       <div class="campo"><label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password"></div>
@@ -24,73 +25,5 @@
   </section>
   <a class="btn btn-secundario btn-bloco" href="./">Voltar ao início</a>
 </main>
-<script type="module">
-  import { configPreenchida, firebaseConfig, auth, FIREBASE_VERSION, db } from "./js/firebase-config.js";
-  import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { doc, setDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { $, escapeHtml, toast, mensagemErroFirebase } from "./js/utils.js";
-  const MASTER_UID = "KZhENlWEtPNO5w2t6pgh8NTE0wW2";
-  const lista = $("#lista");
-
-  function mostrar(nome, estado, detalhe) {
-    const selo = estado === "ok" ? ["selo-ok","OK"] : estado === "aviso" ? ["selo-aviso","ATENÇÃO"] : ["selo-erro","FALHA"];
-    const linha = document.createElement("div");
-    linha.className = "teste";
-    linha.innerHTML = "<div><strong>" + escapeHtml(nome) + "</strong><small>" + escapeHtml(detalhe || "") + "</small></div><span class='selo " + selo[0] + "'>" + selo[1] + "</span>";
-    lista.appendChild(linha);
-  }
-
-  async function rodarTestes() {
-    lista.innerHTML = "";
-    if (!configPreenchida) {
-      mostrar("Configuração Firebase", "erro", "Preencha os dados em js/firebase-config.js.");
-      return;
-    }
-    mostrar("Configuração Firebase", "ok", "Projeto " + firebaseConfig.projectId + " · SDK " + FIREBASE_VERSION);
-    if (!auth.currentUser) {
-      try {
-        await setDoc(doc(db, "_diagnostico", "teste-anonimo"), { criadoEm: serverTimestamp() });
-        mostrar("Bloqueio sem login", "erro", "Uma gravação anônima foi aceita; revise as regras.");
-        try { await deleteDoc(doc(db, "_diagnostico", "teste-anonimo")); } catch (_) {}
-      } catch (error) {
-        mostrar("Bloqueio sem login", error.code === "permission-denied" ? "ok" : "aviso",
-          error.code === "permission-denied" ? "O Firestore recusou a gravação anônima." : mensagemErroFirebase(error));
-      }
-      mostrar("Permissão Mestre", "aviso", "Entre com a conta principal para testar gravação autorizada.");
-      return;
-    }
-    if (auth.currentUser.uid !== MASTER_UID) {
-      mostrar("Permissão Mestre", "erro", "A conta conectada não corresponde ao UID Mestre configurado.");
-      return;
-    }
-    try {
-      const ref = doc(db, "_diagnostico", "ping");
-      await setDoc(ref, { uid: auth.currentUser.uid, ts: serverTimestamp() });
-      await deleteDoc(ref);
-      mostrar("Acesso do Mestre", "ok", "Gravou e removeu o documento temporário de diagnóstico.");
-    } catch (error) {
-      mostrar("Acesso do Mestre", "erro", mensagemErroFirebase(error));
-    }
-  }
-
-  $("#btnEntrar").addEventListener("click", async () => {
-    if (!$("#email").value.trim() || !$("#senha").value) return toast("Informe e-mail e senha.", "aviso");
-    try {
-      await signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#senha").value);
-      $("#senha").value = "";
-      toast("Login realizado.", "sucesso");
-    } catch (error) { toast(mensagemErroFirebase(error), "erro"); }
-  });
-  $("#btnSair").addEventListener("click", () => signOut(auth));
-  $("#btnRodar").addEventListener("click", rodarTestes);
-  onAuthStateChanged(auth, (user) => {
-    $("#areaLogin").classList.toggle("oculto", !!user);
-    $("#areaLogado").classList.toggle("oculto", !user);
-    if (user) {
-      $("#usuarioEmail").textContent = user.email || "(sem e-mail)";
-      $("#usuarioUid").textContent = user.uid;
-    }
-    rodarTestes();
-  });
-</script>
+<script type="module" src="js/diagnostico.js"></script>
 </body></html>
