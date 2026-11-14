@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#e8451e"><title>Carrinho — Deu Fome</title>
+  <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/cliente.css"><link rel="stylesheet" href="/css/pedidos.css">
+</head>
+<body>
+<header class="topo"><a class="topo-link" href="/">🍔 Deu Fome</a></header>
+<main class="container cliente-container">
+  <a class="link-voltar" id="voltar" href="/">← Continuar comprando</a>
+  <h1>Seu carrinho</h1>
+  <p id="carregando" class="texto-suave centro">Carregando carrinho...</p>
+  <div id="avisos"></div>
+
+  <div id="vazio" class="card centro oculto">
+    <p>Seu carrinho está vazio.</p>
+    <a class="btn btn-bloco" href="/">Ver restaurantes</a>
+  </div>
+
+  <div id="conteudo" class="oculto">
+    <section class="card">
+      <h2 id="nomeRestaurante"></h2>
+      <p id="avisoStatus" class="mensagem aviso oculto"></p>
+      <div id="listaItens"></div>
+      <div class="resumo-linha"><span>Subtotal</span><span id="subtotal"></span></div>
+      <div class="resumo-linha"><span>Entrega</span><span id="taxa"></span></div>
+      <div class="resumo-linha total"><span>Total</span><span id="total"></span></div>
+    </section>
+
+    <form id="pedidoForm" class="card">
+      <h2>Seus dados</h2>
+      <div class="campo"><label for="nome">Nome</label><input id="nome" maxlength="60" autocomplete="name" required></div>
+      <div class="campo"><label for="telefone">Telefone (com DDD)</label><input id="telefone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(49) 99999-9999" required></div>
+      <div class="campo"><label for="endereco">Endereço de entrega</label><input id="endereco" maxlength="160" autocomplete="street-address" placeholder="Rua, número, bairro" required></div>
+      <div class="campo"><label for="referencia">Ponto de referência (opcional)</label><input id="referencia" maxlength="80" placeholder="Ex.: portão azul, ao lado da padaria"></div>
+      <div class="campo"><label for="observacao">Observação (opcional)</label><textarea id="observacao" rows="2" maxlength="200" placeholder="Ex.: sem cebola"></textarea></div>
+
+      <h2>Pagamento na entrega</h2>
+      <div class="campo">
+        <label for="pagamento">Forma de pagamento</label>
+        <select id="pagamento" required>
+          <option value="dinheiro">Dinheiro</option>
+          <option value="cartao">Cartão (maquininha)</option>
+          <option value="pix">Pix</option>
+        </select>
+      </div>
+      <div class="campo" id="blocoTroco">
+        <label for="trocoPara">Troco para quanto? (opcional)</label>
+        <input id="trocoPara" inputmode="decimal" placeholder="Ex.: 50,00">
+      </div>
+
+      <p id="msg" class="mensagem erro" aria-live="polite"></p>
+      <button id="enviar" class="btn btn-bloco" type="submit">Enviar pedido</button>
+      <p class="texto-suave centro" style="margin-top:10px">O valor final é confirmado pelo restaurante e pago na entrega.</p>
+    </form>
+  </div>
+</main>
+<script type="module" src="/js/carrinho-pagina.js"></script>
+</body></html>
