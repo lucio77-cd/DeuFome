@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#e8451e"><title>Pedidos — Deu Fome</title>
+  <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/painel.css"><link rel="stylesheet" href="/css/pedidos.css">
+</head>
+<body>
+<header class="topo">Deu Fome <span class="topo-secundario">/ Pedidos</span></header>
+<main class="container painel-container">
+  <a class="link-voltar" href="/painel">← Voltar ao painel</a>
+
+  <section id="semLogin" class="card mensagem aviso oculto">Entre primeiro no <a href="/painel">painel do restaurante</a> com a sua conta e depois volte para esta página.</section>
+
+  <div id="app" class="oculto">
+    <section class="painel-cabecalho"><div><p class="sobretitulo">PEDIDOS</p><h1>Pedidos recebidos</h1><p class="texto-suave">Os pedidos novos aparecem aqui sozinhos. Deixe esta página aberta.</p></div></section>
+    <section id="semVinculo" class="card mensagem aviso oculto">Esta conta não está vinculada a um restaurante. Peça ao Mestre para vincular.</section>
+    <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Restaurante</label><select id="seletorRestaurante"></select></section>
+    <div id="lista"></div>
+  </div>
+</main>
+<script type="module" src="/js/pedidos-painel.js"></script>
+</body></html>
