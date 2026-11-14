@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// Deu Fome — regras do Firestore (Etapa 0)
+// Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Funções ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Dono do restaurante (conta criada no Firebase Auth)
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'KZhENlWEtPNO5w2t6pgh8NTE0wW2';
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // ---------- Públicos (leitura aberta, escrita só admin) ----------
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categorias/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /produtos/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------- Cupons ----------
+    // Cliente logado só consegue ler um cupom pelo código (get), não listar todos
+    match /cupons/{codigo} {
+      allow get: if signedIn();
+      allow list, write: if isAdmin();
+    }
+
+    // ---------- Somente admin ----------
+    match /ingredientes/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /receitas/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Clientes ----------
+    match /usuarios/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Pedidos ----------
+    match /pedidos/{pedidoId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.clienteId == request.auth.uid);
+      allow create: if signedIn()
+                    && request.resource.data.clienteId == request.auth.uid
+                    && request.resource.data.status == 'novo';
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ---------- Diagnóstico (teste de escrita do admin) ----------
+    match /_diagnostico/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Todo o resto negado ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
