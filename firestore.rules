@@ -13,6 +13,14 @@ service cloud.firestore {
         && exists(restauranteRef(restauranteId))
         && get(restauranteRef(restauranteId)).data.ownerUid == request.auth.uid;
     }
+
+    // Vínculo de usuário é escrito exclusivamente pelo Mestre.
+    match /usuarios/{uid} {
+      allow get: if isMaster() || (signedIn() && request.auth.uid == uid);
+      allow list: if isMaster();
+      allow create, update, delete: if isMaster();
+    }
+
     match /restaurantes/{restauranteId} {
       allow read: if isMaster() || isDono(restauranteId);
       allow create, update, delete: if isMaster();
@@ -26,6 +34,7 @@ service cloud.firestore {
         allow read, write: if isMaster() || isDono(restauranteId);
       }
     }
+
     // As coleções globais antigas ficam negadas nesta arquitetura multi-restaurante.
     match /{document=**} {
       allow read, write: if false;
