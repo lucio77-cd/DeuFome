@@ -1,6 +1,7 @@
 /* Deu Fome — telas do cliente (Etapa 2): praça e cardápio */
 .cliente-container { max-width: 720px; padding-top: 18px; padding-bottom: 40px; }
 .topo-link { color: #fff; text-decoration: none; }
+.link-voltar { display: inline-block; margin: 8px 0 20px; }
 
 .hero { text-align: center; padding: 8px 0 18px; }
 .hero h1 { font-size: 1.7rem; }
