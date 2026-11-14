@@ -1,12 +1,12 @@
 # Deu Fome 🍔
 
-Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída com HTML, CSS e JavaScript modular, Firebase Authentication, Firestore e Vercel.
+Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída com HTML, CSS e JavaScript modular, Firebase Authentication, Firestore e Vercel (com uma função serverless para criar pedidos).
 
 ## Etapa 1 — Painéis e cardápio
 
 - Área do Mestre (`/admin`): cadastra restaurantes, vincula o UID do responsável e desativa/reativa restaurantes.
 - Área do restaurante (`/painel`): configura nome, taxa, horário e se está aceitando pedidos.
-- Cardápio: categorias e produtos. Produto não é apagado: é **arquivado** (e pode ser restaurado), para não perder o histórico dos pedidos da Etapa 3. Também dá para **pausar** um produto (indisponível) com um toque.
+- Cardápio: categorias e produtos. Produto não é apagado: é **arquivado** (e pode ser restaurado), para não perder o histórico dos pedidos. Também dá para **pausar** um produto (indisponível) com um toque.
 - Isolamento multi-restaurante: cada conta acessa somente os restaurantes vinculados a ela.
 - Valores monetários armazenados em centavos (inteiros). O campo de preço aceita `12,50`, `12.50` e `1.250,50`.
 
@@ -15,25 +15,45 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 - Praça (`/`): lista os restaurantes ativos, com selo **Aberto agora / Fechado**, taxa de entrega e horário. Abertos aparecem primeiro.
 - Cardápio (`/restaurante?r=ID`): categorias em ordem, produtos com preço e descrição. Produto pausado aparece como **Indisponível**; produto arquivado e categoria inativa não aparecem.
 - "Aberto agora" exige o botão **Aceitando pedidos** ligado no painel **e** o horário atual (Brasília) dentro do funcionamento. Aceita a virada da meia-noite (abre 18:00, fecha 02:00). Abertura igual ao fechamento significa 24 horas.
-- Ainda **não** há carrinho nem pedido: isso é a Etapa 3.
 - Restaurantes cadastrados antes da Etapa 1 que não tenham o campo `ativo` não aparecem na praça (o Mestre pode desativar e reativar para gravar o campo).
 
-## Configuração necessária no Firebase
+## Etapa 3 — Carrinho e pedidos
+
+**Cliente (sem criar conta)**
+- No cardápio, **Adicionar** põe o item no carrinho (guardado no aparelho). Um restaurante por vez: ao trocar de restaurante, o app pergunta antes de esvaziar o carrinho.
+- `/carrinho`: altera quantidades e finaliza com nome, telefone, endereço, referência, observação e forma de pagamento (**na entrega**: dinheiro, cartão na maquininha ou Pix). Nome, telefone e endereço ficam lembrados neste aparelho para o próximo pedido.
+- `/pedido?r=RESTAURANTE&p=PEDIDO`: acompanhamento em tempo real (recebido, em preparo, saiu para entrega, entregue ou cancelado). O código do pedido é aleatório e funciona como endereço secreto: quem tem o link vê aquele pedido.
+
+**Restaurante**
+- `/painel/pedidos`: pedidos chegando em tempo real, com aviso (mensagem, som se o navegador permitir e contador no título da aba). Botões para avançar o status (`novo → preparando → saiu para entrega → entregue`) ou cancelar. Mostra telefone, link do WhatsApp, endereço, itens, observação, pagamento e troco. **Deixe a página aberta** para receber os pedidos.
+
+**Servidor (`api/criar-pedido.js`)**
+- O navegador envia apenas IDs e quantidades. O servidor lê preço, taxa e disponibilidade no Firestore, confere se o restaurante está aberto, calcula o total e grava o pedido com o nome e o preço de cada item copiados (o histórico não muda se o cardápio mudar depois).
+- Recusa produto arquivado, pausado ou de categoria inativa, e total diferente do que o cliente viu (`preco_mudou`).
+- Número sequencial por restaurante (Pedido #1, #2...).
+- Cada pedido tem um código gerado no aparelho: se a rede falhar e o cliente reenviar, o pedido **não duplica**.
+- Limite de **5 pedidos por telefone a cada 10 minutos**.
+- As regras do Firestore **negam** a criação de pedido pelo navegador; só o servidor grava.
+
+Ainda não inclui: cupons, pagamento online, cancelamento pelo cliente, notificação com o app fechado e painel de análise (próximas etapas).
+
+## Configuração necessária
 
 1. Em Authentication → Sign-in method, ative E-mail/senha.
-2. Em Authentication → Users, crie a conta do responsável por cada restaurante. Copie o UID exibido no Firebase e cole no painel Mestre.
-3. **Publique o conteúdo de `firestore.rules`** em Firestore Database → Regras. Sempre que o código mudar, publique as regras junto: o painel grava o campo `ativo` nos produtos, e a praça pública só funciona com as regras da Etapa 2 (sem elas, a praça mostra erro de permissão).
+2. Em Authentication → Users, crie a conta do responsável por cada restaurante. Copie o UID e cole no painel Mestre.
+3. **Publique o conteúdo de `firestore.rules`** em Firestore Database → Regras. Sempre que o código mudar, publique as regras junto.
 4. Confira se o UID Mestre em `js/firebase-config.js` (`MASTER_UID`) e em `firestore.rules` (função `isMaster()`) corresponde à conta principal.
-5. Faça deploy na Vercel e teste antes de divulgar.
+5. **Chave do servidor (Etapa 3):** no Firebase Console → Configurações do projeto → Contas de serviço → **Gerar nova chave privada** (baixa um JSON). Na Vercel → Settings → Environment Variables, crie `FIREBASE_SERVICE_ACCOUNT` e cole o conteúdo inteiro do JSON. Depois faça um novo deploy. **Essa chave dá acesso total ao banco: nunca coloque no GitHub nem em mensagens.** Se o pedido falhar com "Servidor sem configuração", a variável está ausente ou inválida.
+6. Faça deploy na Vercel e teste antes de divulgar. O `package.json` instala o `firebase-admin` para a função.
 
 ## Como testar (sem terminal)
 
-1. Abra `/diagnostico` **sem login**: os três testes de bloqueio devem dar OK.
-2. Entre com a conta **Mestre** no próprio diagnóstico: gravar e listar restaurantes devem dar OK.
-3. Entre com a conta de **um restaurante**: gravar, listar todos os restaurantes e ler vínculos de outra conta devem ser negados, e ler o próprio índice deve ser permitido.
-4. Com duas contas de restaurantes diferentes, confira que cada painel mostra só o seu cardápio.
-5. **Praça pública:** abra `/` em uma aba anônima (sem login). Deve listar os restaurantes ativos. Desative um no `/admin` e atualize: ele some. Em `/painel`, arquive um produto e pause outro: no cardápio público o arquivado some e o pausado aparece como Indisponível.
-6. Para conferir uma regra isolada, use o **Rules Playground** no Console do Firebase (Firestore → Regras).
+1. Abra `/diagnostico` **sem login**: os três testes de bloqueio devem dar OK. Depois entre com a conta Mestre e com a de um restaurante.
+2. **Praça pública:** abra `/` em aba anônima. Deve listar os restaurantes ativos.
+3. **Pedido:** com o restaurante aberto (botão "Aceitando pedidos" ligado e dentro do horário), adicione produtos, vá em `/carrinho`, preencha e envie. Você deve cair em `/pedido?...` com o status "Pedido recebido".
+4. **Painel:** em outra aba, entre no `/painel/pedidos` com a conta do restaurante. O pedido aparece sozinho. Avance o status e veja a página do cliente mudar.
+5. **Segurança:** em um carrinho, pause o produto no `/painel` e tente enviar: deve recusar e tirar o item do carrinho. Confira também que `/pedido?r=...&p=` com um código inventado mostra "Pedido não encontrado".
+6. Para conferir uma regra isolada, use o **Rules Playground** no Console do Firebase.
 
 ## Fluxo de cadastro
 
@@ -41,7 +61,7 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 2. Cria a conta do responsável no Firebase Authentication (Console).
 3. Informa o nome do restaurante e o UID do responsável no painel (o UID é conferido por formato e por uma confirmação).
 4. O painel grava restaurante, associação de membro e índice privado do usuário em uma única operação atômica.
-5. O responsável entra em `/painel/` e administra seu cardápio.
+5. O responsável entra em `/painel/` e administra seu cardápio e seus pedidos.
 6. Para tirar o acesso de um restaurante, o Mestre usa **Desativar**: nada é apagado e dá para **Reativar** depois. Restaurante desativado some da praça.
 
 ## Estrutura Firestore
@@ -50,35 +70,40 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 - `restaurantes/{restauranteId}/membros/{uid}` — associação criada somente pelo Mestre.
 - `restaurantes/{restauranteId}/categorias/{categoriaId}` — categorias do cardápio (`nome`, `ativo`, `ordem`). Leitura pública só das ativas.
 - `restaurantes/{restauranteId}/produtos/{produtoId}` — produtos: `nome`, `descricao`, `precoCentavos`, `categoriaId`, `disponivel`, `ativo` (falso = arquivado). Leitura pública só dos ativos.
-- `usuarios/{uid}/restaurantes/{restauranteId}` — índice privado dos restaurantes vinculados ao usuário (cópia do nome pode ficar velha; o painel lê o nome do restaurante).
+- `restaurantes/{restauranteId}/pedidos/{pedidoId}` — pedidos (criados só pelo servidor): `numero`, `status`, `itens` (nome e preço copiados), `subtotalCentavos`, `taxaEntregaCentavos`, `totalCentavos`, `cliente`, `entrega`, `pagamento`, `observacao`. Cliente lê só pelo ID; restaurante lista e muda o status.
+- `restaurantes/{restauranteId}/contadores/pedidos` e `_limites/{hash}` — uso interno do servidor (negados ao navegador).
+- `usuarios/{uid}/restaurantes/{restauranteId}` — índice privado dos restaurantes vinculados ao usuário.
 
-As regras negam as antigas coleções globais (`categorias`, `produtos`, `config`...) e qualquer caminho não listado.
+As regras negam as coleções antigas e qualquer caminho não listado.
 
 ## Limites das regras
 
-Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato `HH:MM` (abertura maior que fechamento significa que fecha no dia seguinte), `criadoEm`/`atualizadoEm` presos ao horário do servidor, produto só com categoria existente. Restaurantes nunca são apagados pelo app (desative em vez de excluir) e produtos só são apagados pelo Mestre.
+Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato `HH:MM` (abertura maior que fechamento significa que fecha no dia seguinte), `criadoEm`/`atualizadoEm` presos ao horário do servidor, produto só com categoria existente. Restaurantes nunca são apagados pelo app (desative em vez de excluir) e produtos só são apagados pelo Mestre. Pedido só muda de status, seguindo o andamento válido, e nunca é apagado.
 
 ## Segurança e limites desta versão
 
-- O UID Mestre está fixado nas regras e em `js/firebase-config.js`; deve corresponder à conta principal correta. No cliente ele só mostra/esconde telas.
-- O vínculo de usuário a restaurante só pode ser criado pelo Mestre.
-- O painel não cria contas Authentication de terceiros, evitando credenciais administrativas no navegador. O UID ainda é copiado à mão do Console: um UID inexistente passa pelas regras (elas não consultam o Authentication). Uma função no servidor resolveria isso.
-- O Mestre e o restaurante compartilham a mesma sessão do navegador: entrar em `/admin` com outra conta encerra a sessão do painel.
-- O documento público do restaurante inclui o campo `criadoPor` (UID do Mestre, que já aparece no código do site). Não coloque dados privados nesse documento.
-- Ainda não inclui carrinho, pedidos, pagamentos, cupons ou API server-side.
-- As regras garantem quem cria um pedido, mas não conferem o total nem os preços: isso fica para a Etapa 3 (preço calculado no servidor, com o nome e o preço de cada item copiados para o pedido).
-- Antes do beta público, validar o fluxo com duas contas distintas (passos acima).
+- O UID Mestre está fixado nas regras e em `js/firebase-config.js`; no cliente ele só mostra/esconde telas.
+- O vínculo de usuário a restaurante só pode ser criado pelo Mestre. O UID ainda é copiado à mão do Console: um UID inexistente passa pelas regras.
+- O Mestre e o restaurante compartilham a mesma sessão do navegador.
+- O documento público do restaurante inclui o campo `criadoPor` (UID do Mestre, que já aparece no código do site). Não coloque dados privados nele.
+- **Pedido:** quem tem o link do pedido vê nome, telefone e endereço daquele pedido. O código tem 24 caracteres aleatórios, mas não compartilhe o link publicamente.
+- O limite contra abuso é por telefone (5 pedidos a cada 10 minutos). Não há limite por IP nem captcha nesta versão.
+- Os preços do carrinho no aparelho servem só para exibição: o servidor recalcula tudo.
+- A chave `FIREBASE_SERVICE_ACCOUNT` fica somente na Vercel.
 
 ## Estrutura principal
 
 - `index.html` — Praça de alimentação (pública).
-- `restaurante.html` — Cardápio público de um restaurante (`/restaurante?r=ID`).
-- `admin/` — Painel do Mestre (HTML).
-- `painel/` — Painel do restaurante (HTML).
+- `restaurante.html` — Cardápio público (`/restaurante?r=ID`).
+- `carrinho.html` — Carrinho e finalização.
+- `pedido.html` — Acompanhamento do pedido.
+- `admin/` — Painel do Mestre. `painel/` — Painel do restaurante (`painel/pedidos.html` = pedidos recebidos).
 - `diagnostico.html` — Testes de configuração, regras e isolamento.
-- `css/` — Estilos: `base.css`, `painel.css` (painéis) e `cliente.css` (praça e cardápio).
-- `js/` — Código: `firebase-config.js`, `utils.js`, `cliente.js`, `praca.js`, `restaurante.js`, `admin.js`, `painel.js`, `diagnostico.js`.
+- `api/criar-pedido.js` — Função serverless que cria o pedido (preço calculado no servidor).
+- `css/` — `base.css`, `painel.css`, `cliente.css`, `pedidos.css`.
+- `js/` — `firebase-config.js`, `utils.js`, `cliente.js`, `carrinho.js`, `praca.js`, `restaurante.js`, `carrinho-pagina.js`, `pedido.js`, `pedidos-painel.js`, `admin.js`, `painel.js`, `diagnostico.js`.
+- `package.json` — dependência `firebase-admin` da função.
 - `firestore.rules` — Regras de segurança.
 - `vercel.json` — Cabeçalhos de segurança (CSP sem script inline) e URLs limpas.
 
-> As páginas públicas novas usam caminhos absolutos (`/js/...`, `/css/...`), que funcionam com `cleanUrls` e sem barra final. Os painéis em `admin/` e `painel/` carregam os scripts com `../js/...`.
+> As páginas públicas usam caminhos absolutos (`/js/...`, `/css/...`), que funcionam com `cleanUrls` e sem barra final. Os painéis `admin/` e `painel/` carregam os scripts com `../js/...`, e os links para `/painel/pedidos` são absolutos pelo mesmo motivo.
