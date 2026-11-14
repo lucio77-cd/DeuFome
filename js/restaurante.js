@@ -1,10 +1,13 @@
-// Deu Fome — cardápio público de um restaurante (Etapa 2). Endereço: /restaurante?r=ID
+// Deu Fome — cardápio público de um restaurante, com botão Adicionar e barra do carrinho (Etapa 3)
+// Endereço: /restaurante?r=ID
 import { db } from "./firebase-config.js";
-import { $, criar, formatarMoeda, mensagemErroFirebase } from "./utils.js";
+import { $, criar, formatarMoeda, mensagemErroFirebase, toast } from "./utils.js";
 import { statusRestaurante, textoTaxa, textoHorario } from "./cliente.js";
+import { lerCarrinho, adicionar, carrinhoDeOutroRestaurante, totalDeItens, subtotalCentavos } from "./carrinho.js";
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const conteudo = $("#conteudo");
+let contexto = null; // cardápio na tela: { id, nome, produtos: Map(id -> produto) }
 
 function aviso(texto) {
   conteudo.replaceChildren(
@@ -13,9 +16,31 @@ function aviso(texto) {
   );
 }
 
-function desenhar(restaurante, categorias, produtos) {
+// Barra fixa no rodapé com o resumo do carrinho (some quando o carrinho está vazio)
+function atualizarBarra() {
+  let barra = document.getElementById("barraCarrinho");
+  const carrinho = lerCarrinho();
+  const quantidade = totalDeItens(carrinho);
+  if (!quantidade) {
+    if (barra) barra.remove();
+    document.body.classList.remove("body-com-barra");
+    return;
+  }
+  if (!barra) {
+    barra = criar("a", { id: "barraCarrinho", class: "barra-carrinho", href: "/carrinho" });
+    document.body.append(barra);
+  }
+  barra.replaceChildren(
+    criar("span", { texto: `🛒 Ver carrinho (${quantidade} ${quantidade === 1 ? "item" : "itens"})` }),
+    criar("strong", { texto: formatarMoeda(subtotalCentavos(carrinho)) })
+  );
+  document.body.classList.add("body-com-barra");
+}
+
+function desenhar(id, restaurante, categorias, produtos) {
   const status = statusRestaurante(restaurante);
   document.title = `${restaurante.nome} — Deu Fome`;
+  contexto = { id, nome: restaurante.nome, produtos: new Map(produtos.map((p) => [p.id, p])) };
 
   categorias.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)
     || String(a.nome).localeCompare(String(b.nome), "pt-BR"));
@@ -37,10 +62,11 @@ function desenhar(restaurante, categorias, produtos) {
     criar("span", { class: `selo ${status.classe}`, texto: status.texto }),
     criar("p", { class: "texto-suave", style: "margin-top:10px", texto: `${textoTaxa(restaurante)} · ${textoHorario(restaurante)}` })
   );
-  if (!status.aberto) {
-    cabecalho.append(criar("p", { class: "mensagem aviso", texto: `Fechado agora. ${status.detalhe} Você pode ver o cardápio.` }));
+  if (status.aberto) {
+    cabecalho.append(criar("p", { class: "texto-suave", texto: "Toque em Adicionar para montar seu pedido." }));
+  } else {
+    cabecalho.append(criar("p", { class: "mensagem aviso", texto: `Fechado agora. ${status.detalhe} Você pode ver o cardápio, mas só dá para pedir com o restaurante aberto.` }));
   }
-  cabecalho.append(criar("p", { class: "texto-suave", texto: "Os pedidos online chegam na próxima etapa." }));
 
   const blocos = [cabecalho];
 
@@ -56,18 +82,37 @@ function desenhar(restaurante, categorias, produtos) {
         criar("h2", { texto: c.nome }),
         ...porCategoria.get(c.id).map((p) => {
           const pausado = p.disponivel === false;
+          let acao = "";
+          if (pausado) acao = criar("span", { class: "selo selo-aviso", texto: "Indisponível" });
+          else if (status.aberto) acao = criar("button", { class: "btn btn-pequeno", type: "button", texto: "Adicionar", "data-produto": p.id });
           return criar("div", { class: "produto" + (pausado ? " indisponivel" : "") },
             criar("div", { class: "produto-info" },
               criar("strong", { texto: p.nome }),
               p.descricao ? criar("p", { class: "texto-suave", texto: p.descricao }) : ""),
             criar("div", { class: "produto-preco" },
               criar("span", { texto: formatarMoeda(p.precoCentavos) }),
-              pausado ? criar("span", { class: "selo selo-aviso", texto: "Indisponível" }) : ""));
+              acao));
         })));
     }
   }
   conteudo.replaceChildren(...blocos);
+  atualizarBarra();
 }
+
+// Clique em "Adicionar"
+conteudo.addEventListener("click", (evento) => {
+  const botao = evento.target.closest("button[data-produto]");
+  if (!botao || !contexto) return;
+  const produto = contexto.produtos.get(botao.dataset.produto);
+  if (!produto) return;
+  if (carrinhoDeOutroRestaurante(contexto.id)) {
+    const outro = lerCarrinho().restauranteNome || "outro restaurante";
+    if (!confirm(`Seu carrinho tem itens de "${outro}". Esvaziar e começar um carrinho em "${contexto.nome}"?`)) return;
+  }
+  adicionar({ id: contexto.id, nome: contexto.nome }, produto);
+  toast(`${produto.nome} adicionado.`, "sucesso", 1500);
+  atualizarBarra();
+});
 
 async function carregar() {
   const id = new URLSearchParams(location.search).get("r") || "";
@@ -91,6 +136,7 @@ async function carregar() {
       getDocs(query(collection(ref, "produtos"), where("ativo", "==", true)))
     ]);
     desenhar(
+      id,
       snapshot.data(),
       cats.docs.map((d) => ({ ...d.data(), id: d.id })),
       prods.docs.map((d) => ({ ...d.data(), id: d.id }))
@@ -100,4 +146,6 @@ async function carregar() {
   }
 }
 
+// Voltando pelo botão "voltar" do navegador, o carrinho pode ter mudado
+window.addEventListener("pageshow", atualizarBarra);
 carregar();
