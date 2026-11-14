@@ -14,6 +14,9 @@ export const firebaseConfig = {
   measurementId: "G-GCV527ESZD"
 };
 export const configPreenchida = true;
+// UID da conta Mestre. Só serve para mostrar/esconder telas: quem protege os dados é o
+// firestore.rules (mantenha o mesmo UID lá, na função isMaster()).
+export const MASTER_UID = "KZhENlWEtPNO5w2t6pgh8NTE0wW2";
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);

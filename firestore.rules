@@ -1,84 +1,127 @@
 rules_version = '2';
+
+// Deu Fome — regras do Firestore (Etapa 1, multi-restaurante)
+// Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar
+//
+// Modelo:
+//   restaurantes/{id}                      dados e configurações do restaurante
+//   restaurantes/{id}/membros/{uid}        quem pode gerenciar (criado só pelo Mestre)
+//   restaurantes/{id}/categorias/{id}      categorias do cardápio
+//   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
+//   usuarios/{uid}/restaurantes/{id}       índice privado de vínculos (escrito só pelo Mestre)
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- Funções ----------
     function signedIn() {
       return request.auth != null;
     }
+
     function isMaster() {
       return signedIn() && request.auth.uid == 'KZhENlWEtPNO5w2t6pgh8NTE0wW2';
     }
+
+    // Membro ativo de um restaurante que também está ativo
     function isMember(restauranteId) {
       return signedIn()
         && exists(/databases/$(database)/documents/restaurantes/$(restauranteId)/membros/$(request.auth.uid))
-        && get(/databases/$(database)/documents/restaurantes/$(restauranteId)/membros/$(request.auth.uid)).data.ativo == true;
+        && get(/databases/$(database)/documents/restaurantes/$(restauranteId)/membros/$(request.auth.uid)).data.ativo == true
+        && get(/databases/$(database)/documents/restaurantes/$(restauranteId)).data.ativo == true;
     }
+
     function canManageRestaurant(restauranteId) {
       return isMaster() || isMember(restauranteId);
     }
-    function validRestaurantData(data) {
-      return data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 80
-        && data.taxaEntregaCentavos is int && data.taxaEntregaCentavos >= 0
-        && data.horarioAbertura is string && data.horarioFechamento is string
-        && data.aberto is bool;
-    }
-    function validCategory(data) {
-      return data.keys().hasOnly(['nome', 'ativo', 'ordem', 'criadoEm'])
-        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 45
-        && data.ativo is bool && data.ordem is int;
-    }
-    function validProduct(data) {
-      return data.keys().hasOnly(['nome', 'descricao', 'precoCentavos', 'categoriaId', 'disponivel', 'criadoEm', 'atualizadoEm'])
-        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 80
-        && data.descricao is string && data.descricao.size() <= 240
-        && data.precoCentavos is int && data.precoCentavos > 0
-        && data.categoriaId is string && data.categoriaId.size() > 0
-        && data.disponivel is bool;
+
+    // "HH:MM" de 00:00 a 23:59 (a virada da meia-noite é permitida: abre 18:00, fecha 02:00)
+    function validHora(valor) {
+      return valor is string && valor.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
     }
 
+    // ---------- Validações de dados ----------
+    function validRestaurantData(data) {
+      return data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 80
+        && data.taxaEntregaCentavos is int && data.taxaEntregaCentavos >= 0 && data.taxaEntregaCentavos <= 100000
+        && validHora(data.horarioAbertura)
+        && validHora(data.horarioFechamento)
+        && data.aberto is bool;
+    }
+
+    function validCategoryFields(data) {
+      return data.keys().hasOnly(['nome', 'ativo', 'ordem', 'criadoEm'])
+        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 45
+        && data.ativo is bool
+        && data.ordem is int && data.ordem >= 0 && data.ordem <= 9999;
+    }
+
+    function validProductFields(restauranteId, data) {
+      return data.keys().hasOnly(['nome', 'descricao', 'precoCentavos', 'categoriaId', 'disponivel', 'ativo', 'criadoEm', 'atualizadoEm'])
+        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 80
+        && data.descricao is string && data.descricao.size() <= 240
+        && data.precoCentavos is int && data.precoCentavos > 0 && data.precoCentavos <= 1000000
+        && data.categoriaId is string && data.categoriaId.matches('^[A-Za-z0-9]{1,64}$')
+        && exists(/databases/$(database)/documents/restaurantes/$(restauranteId)/categorias/$(data.categoriaId))
+        && data.disponivel is bool
+        && data.ativo is bool
+        && data.atualizadoEm == request.time;
+    }
+
+    // ---------- Restaurantes ----------
     match /restaurantes/{restauranteId} {
       allow read: if isMaster() || isMember(restauranteId);
-      allow create, delete: if isMaster();
+      allow create: if isMaster();
+      // Dono só altera os campos de configuração, validados; o Mestre altera tudo (inclusive "ativo")
       allow update: if isMaster()
         || (isMember(restauranteId)
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['nome', 'taxaEntregaCentavos', 'horarioAbertura', 'horarioFechamento', 'aberto', 'atualizadoEm'])
-          && validRestaurantData(request.resource.data));
+          && validRestaurantData(request.resource.data)
+          && request.resource.data.atualizadoEm == request.time);
+      // Restaurante nunca é apagado pelo app: desative em vez de excluir (apagar só pelo Console)
+      allow delete: if false;
 
       match /membros/{uid} {
         allow read: if isMaster() || (signedIn() && request.auth.uid == uid);
         allow create, update, delete: if isMaster();
       }
+
       match /categorias/{categoriaId} {
         allow read: if canManageRestaurant(restauranteId);
-        allow create: if canManageRestaurant(restauranteId) && validCategory(request.resource.data);
-        allow update: if canManageRestaurant(restauranteId) && validCategory(request.resource.data);
+        allow create: if canManageRestaurant(restauranteId)
+          && validCategoryFields(request.resource.data)
+          && request.resource.data.criadoEm == request.time;
+        allow update: if canManageRestaurant(restauranteId)
+          && validCategoryFields(request.resource.data)
+          && request.resource.data.criadoEm == resource.data.criadoEm;
         allow delete: if canManageRestaurant(restauranteId);
       }
+
       match /produtos/{produtoId} {
         allow read: if canManageRestaurant(restauranteId);
-        allow create: if canManageRestaurant(restauranteId) && validProduct(request.resource.data);
-        allow update: if canManageRestaurant(restauranteId) && validProduct(request.resource.data);
-        allow delete: if canManageRestaurant(restauranteId);
-      }
-      match /configuracoes/{configId} {
-        allow read, write: if canManageRestaurant(restauranteId);
+        allow create: if canManageRestaurant(restauranteId)
+          && validProductFields(restauranteId, request.resource.data)
+          && request.resource.data.criadoEm == request.time;
+        allow update: if canManageRestaurant(restauranteId)
+          && validProductFields(restauranteId, request.resource.data)
+          && request.resource.data.criadoEm == resource.data.criadoEm;
+        // Produto não é apagado pelo painel (fica "arquivado": ativo = false), para o histórico de pedidos
+        allow delete: if isMaster();
       }
     }
 
+    // ---------- Índice de vínculos do usuário ----------
     match /usuarios/{uid}/restaurantes/{restauranteId} {
       allow read: if isMaster() || (signedIn() && request.auth.uid == uid);
       allow create, update, delete: if isMaster();
     }
 
-    match /config/{docId} { allow read, write: if false; }
-    match /categorias/{id} { allow read, write: if false; }
-    match /produtos/{id} { allow read, write: if false; }
-    match /cupons/{codigo} { allow read, write: if false; }
-    match /ingredientes/{id} { allow read, write: if false; }
-    match /receitas/{id} { allow read, write: if false; }
-    match /pedidos/{pedidoId} { allow read, write: if false; }
-    match /_diagnostico/{id} { allow read, write: if isMaster(); }
+    // ---------- Diagnóstico (teste de escrita do Mestre) ----------
+    match /_diagnostico/{id} {
+      allow read, write: if isMaster();
+    }
 
+    // ---------- Todo o resto negado ----------
     match /{document=**} {
       allow read, write: if false;
     }
