@@ -35,9 +35,14 @@ onAuthStateChanged(auth, async (user) => {
 
 async function carregarVinculos(uid) {
   try {
+    $("#configForm").classList.remove("oculto");
+    $("#categoriaForm").classList.remove("oculto");
+    $("#produtoForm").classList.remove("oculto");
     const snap = await getDocs(collection(db, "usuarios", uid, "restaurantes"));
     restaurantes = snap.docs.map((item) => ({ id: item.id, ...item.data() })).filter((item) => item.ativo !== false);
     if (!restaurantes.length) {
+      const avisoExistente = $("#semVinculo");
+      if (avisoExistente) avisoExistente.remove();
       $("#tituloRestaurante").textContent = "Conta ainda não vinculada";
       $("#seletorArea").classList.add("oculto");
       $("#configForm").classList.add("oculto");
