@@ -1,0 +1,9 @@
+{
+  "name": "deu-fome",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Plataforma de pedidos para restaurantes de Treze Tílias",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
