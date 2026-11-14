@@ -1,14 +1,18 @@
 rules_version = '2';
 
-// Deu Fome — regras do Firestore (Etapa 1, multi-restaurante)
+// Deu Fome — regras do Firestore (Etapa 2: cardápio público + multi-restaurante)
 // Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar
 //
 // Modelo:
-//   restaurantes/{id}                      dados e configurações do restaurante
+//   restaurantes/{id}                      dados e configurações do restaurante (leitura pública só se ativo)
 //   restaurantes/{id}/membros/{uid}        quem pode gerenciar (criado só pelo Mestre)
-//   restaurantes/{id}/categorias/{id}      categorias do cardápio
+//   restaurantes/{id}/categorias/{id}      categorias do cardápio (leitura pública só se ativas)
 //   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
 //   usuarios/{uid}/restaurantes/{id}       índice privado de vínculos (escrito só pelo Mestre)
+//
+// Leitura pública (sem login): somente restaurante ativo, e dentro dele categorias e produtos com
+// ativo == true. As telas do cliente consultam com where("ativo", "==", true), que é o que as
+// regras exigem para permitir a listagem.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -22,12 +26,17 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == 'KZhENlWEtPNO5w2t6pgh8NTE0wW2';
     }
 
+    // Restaurante existe e está ativo (usado na leitura pública do cardápio)
+    function restauranteAtivo(restauranteId) {
+      return get(/databases/$(database)/documents/restaurantes/$(restauranteId)).data.ativo == true;
+    }
+
     // Membro ativo de um restaurante que também está ativo
     function isMember(restauranteId) {
       return signedIn()
         && exists(/databases/$(database)/documents/restaurantes/$(restauranteId)/membros/$(request.auth.uid))
         && get(/databases/$(database)/documents/restaurantes/$(restauranteId)/membros/$(request.auth.uid)).data.ativo == true
-        && get(/databases/$(database)/documents/restaurantes/$(restauranteId)).data.ativo == true;
+        && restauranteAtivo(restauranteId);
     }
 
     function canManageRestaurant(restauranteId) {
@@ -69,7 +78,8 @@ service cloud.firestore {
 
     // ---------- Restaurantes ----------
     match /restaurantes/{restauranteId} {
-      allow read: if isMaster() || isMember(restauranteId);
+      // Público lê só restaurante ativo; Mestre e membros leem sempre (o Mestre vê os desativados)
+      allow read: if resource.data.ativo == true || isMaster() || isMember(restauranteId);
       allow create: if isMaster();
       // Dono só altera os campos de configuração, validados; o Mestre altera tudo (inclusive "ativo")
       allow update: if isMaster()
@@ -87,7 +97,9 @@ service cloud.firestore {
       }
 
       match /categorias/{categoriaId} {
-        allow read: if canManageRestaurant(restauranteId);
+        // Público: só categoria ativa de restaurante ativo. Painel: tudo (inclusive categorias inativas).
+        allow read: if (resource.data.ativo == true && restauranteAtivo(restauranteId))
+          || canManageRestaurant(restauranteId);
         allow create: if canManageRestaurant(restauranteId)
           && validCategoryFields(request.resource.data)
           && request.resource.data.criadoEm == request.time;
@@ -98,7 +110,9 @@ service cloud.firestore {
       }
 
       match /produtos/{produtoId} {
-        allow read: if canManageRestaurant(restauranteId);
+        // Público: só produto ativo (não arquivado) de restaurante ativo. Painel: tudo (inclusive arquivados).
+        allow read: if (resource.data.ativo == true && restauranteAtivo(restauranteId))
+          || canManageRestaurant(restauranteId);
         allow create: if canManageRestaurant(restauranteId)
           && validProductFields(restauranteId, request.resource.data)
           && request.resource.data.criadoEm == request.time;
