@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8451e"><title>Mestre — Deu Fome</title>
+  <link rel="stylesheet" href="../css/base.css"><link rel="stylesheet" href="../css/painel.css">
+</head>
+<body>
+<header class="topo">Deu Fome <span class="topo-secundario">/ Mestre</span></header>
+<main class="container painel-container">
+  <section id="loginCard" class="card">
+    <h1>Acesso do Mestre</h1><p class="texto-suave">Entre com a conta principal da plataforma.</p>
+    <form id="loginForm">
+      <div class="campo"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required></div>
+      <div class="campo"><label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-bloco" type="submit">Entrar</button>
+    </form><p id="loginErro" class="mensagem erro" aria-live="polite"></p>
+  </section>
+  <div id="app" class="oculto">
+    <section class="painel-cabecalho"><div><p class="sobretitulo">ADMINISTRAÇÃO DA PLATAFORMA</p><h1>Seus restaurantes</h1><p class="texto-suave">Cadastre estabelecimentos e vincule a conta responsável.</p></div><button id="sair" class="btn btn-secundario">Sair</button></section>
+    <section class="card">
+      <h2>Novo restaurante</h2>
+      <p class="texto-suave">Crie primeiro a conta do responsável em Firebase Console → Authentication → Users. Depois copie o UID e vincule aqui.</p>
+      <form id="restauranteForm">
+        <div class="campo"><label for="nome">Nome do restaurante</label><input id="nome" maxlength="80" required placeholder="Ex.: Restaurante da Praça"></div>
+        <div class="campo"><label for="ownerUid">UID da conta responsável</label><input id="ownerUid" required autocomplete="off" placeholder="Cole o UID do Firebase Authentication"></div>
+        <button class="btn btn-bloco" type="submit">Cadastrar restaurante</button><p id="formMsg" class="mensagem" aria-live="polite"></p>
+      </form>
+    </section>
+    <section class="card"><div class="linha-titulo"><h2>Restaurantes cadastrados</h2><button id="atualizar" class="btn btn-secundario btn-pequeno" type="button">Atualizar</button></div><div id="listaRestaurantes"><p class="texto-suave">Carregando...</p></div></section>
+  </div>
+  <a class="link-voltar" href="../">Voltar ao início</a>
+</main>
+<script type="module" src="./admin.js"></script>
+</body></html>
