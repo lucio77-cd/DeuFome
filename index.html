@@ -1,35 +1,19 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#e8451e">
-  <title>Deu Fome — Treze Tílias</title>
-  <meta name="description" content="Peça comida dos restaurantes de Treze Tílias e receba em casa.">
-  <link rel="stylesheet" href="css/base.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8451e"><title>Deu Fome — Treze Tílias</title>
+  <meta name="description" content="Plataforma de pedidos para restaurantes de Treze Tílias.">
+  <link rel="stylesheet" href="css/base.css"><link rel="stylesheet" href="css/painel.css">
 </head>
 <body>
-  <header class="topo">🍔 Deu Fome</header>
-
-  <main class="container">
-    <section class="card centro">
-      <h1>Deu Fome?</h1>
-      <p class="texto-suave">Peça comida dos restaurantes de Treze Tílias e receba em casa.</p>
-      <p><span class="selo selo-aviso">Versão beta — em construção</span></p>
-    </section>
-
-    <section class="card">
-      <h2>Status do projeto</h2>
-      <p class="texto-suave">Etapa 0 (fundação) concluída: regras do banco, configuração do Firebase, utilitários e estilos base.</p>
-      <a class="btn btn-secundario btn-bloco" href="diagnostico">Abrir diagnóstico</a>
-    </section>
-  </main>
-
-  <script type="module">
-    import { configPreenchida } from "./js/firebase-config.js";
-    if (!configPreenchida) {
-      console.warn("Deu Fome: preencha js/firebase-config.js com a configuração do Firebase.");
-    }
-  </script>
-</body>
-</html>
+<header class="topo">🍔 Deu Fome</header>
+<main class="container painel-container">
+  <section class="card centro"><h1>Deu Fome?</h1><p class="texto-suave">Uma nova forma de conectar pessoas e restaurantes de Treze Tílias.</p><span class="selo selo-aviso">Versão beta — em construção</span></section>
+  <section class="card"><h2>Entrar na plataforma</h2><p class="texto-suave">Escolha sua área de acesso.</p>
+    <a class="btn btn-bloco" href="painel/">Painel do restaurante</a>
+    <a class="btn btn-secundario btn-bloco" style="margin-top:10px" href="admin/">Administração do Mestre</a>
+  </section>
+  <p class="texto-suave centro">O cardápio público e os pedidos serão liberados nas próximas etapas.</p>
+</main>
+</body></html>
