@@ -36,14 +36,43 @@ export function formatarMoeda(centavos) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// "12,50" ou "R$ 12,50" -> 1250
+// Texto digitado -> centavos (inteiro), ou null se o texto não for um valor válido.
+// "12,50" | "R$ 12,50" | "12.50" -> 1250    "1.250,50" | "1,250.50" -> 125050
+// "1.250" -> 125000 (ponto seguido de 3 dígitos é milhar)   "" | "abc" | "-5" | "12,505" -> null
+// Trabalha com texto (sem float), então não existe erro de arredondamento.
 export function paraCentavos(texto) {
-  const limpo = String(texto ?? "")
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const numero = parseFloat(limpo);
-  return Number.isFinite(numero) ? Math.round(numero * 100) : 0;
+  const s = String(texto ?? "").replace(/R\$/gi, "").replace(/\s/g, "");
+  if (!s || !/^[\d.,]+$/.test(s)) return null;
+
+  const ultimoPonto = s.lastIndexOf(".");
+  const ultimaVirgula = s.lastIndexOf(",");
+  const qtdPontos = s.split(".").length - 1;
+  const qtdVirgulas = s.split(",").length - 1;
+
+  // Descobre qual caractere é o separador decimal (o outro, se existir, é milhar)
+  let posDecimal = -1;
+  if (qtdPontos && qtdVirgulas) {
+    posDecimal = Math.max(ultimoPonto, ultimaVirgula);
+  } else if (qtdVirgulas === 1) {
+    posDecimal = ultimaVirgula;
+  } else if (qtdPontos === 1 && s.length - ultimoPonto - 1 <= 2) {
+    posDecimal = ultimoPonto; // "12.5" ou "12.50" (teclado com ponto decimal)
+  }
+
+  const inteiraBruta = posDecimal >= 0 ? s.slice(0, posDecimal) : s;
+  const parteDecimal = posDecimal >= 0 ? s.slice(posDecimal + 1) : "";
+  if (/[.,]/.test(parteDecimal) || parteDecimal.length > 2) return null;
+  // Separadores na parte inteira só valem como milhar: "1.250" ou "1.250.000" (sempre o mesmo, grupos de 3)
+  if (/[.,]/.test(inteiraBruta) && !/^\d{1,3}([.,])\d{3}(\1\d{3})*$/.test(inteiraBruta)) return null;
+  const parteInteira = inteiraBruta.replace(/[.,]/g, "");
+
+  const centavos = Number(parteInteira || "0") * 100 + Number((parteDecimal + "00").slice(0, 2));
+  return Number.isSafeInteger(centavos) ? centavos : null;
+}
+
+// Centavos -> texto para campos de formulário ("12,50")
+export function centavosParaTexto(centavos) {
+  return (Number(centavos || 0) / 100).toFixed(2).replace(".", ",");
 }
 
 // Aceita Date, Timestamp do Firestore (toDate) ou número
