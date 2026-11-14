@@ -1,0 +1,47 @@
+/* Deu Fome — carrinho, acompanhamento e painel de pedidos (Etapa 3) */
+.btn-pequeno { min-height: 34px; padding: 5px 12px; font-size: .86rem; white-space: nowrap; }
+.btn-perigo { background: transparent; color: var(--cor-erro); border: 2px solid var(--cor-erro); }
+.btn-perigo:hover { background: rgba(217, 48, 37, .08); }
+.body-com-barra { padding-bottom: 84px; }
+
+/* Barra do carrinho (aparece no cardápio) */
+.barra-carrinho {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; max-width: 696px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-radius: var(--raio); background: var(--cor-primaria); color: #fff;
+  text-decoration: none; font-weight: 700; box-shadow: 0 4px 16px rgba(43, 33, 24, .25); z-index: 20;
+}
+.barra-carrinho:hover { background: var(--cor-primaria-escura); }
+
+/* Carrinho */
+.item-carrinho { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cor-borda); }
+.item-carrinho-info { min-width: 0; }
+.item-carrinho-info strong { overflow-wrap: anywhere; }
+.item-carrinho-info small { display: block; color: var(--cor-texto-suave); }
+.quantidade { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.quantidade .btn { width: 38px; min-height: 38px; padding: 0; border-radius: 50%; font-size: 1.1rem; }
+.quantidade span { min-width: 22px; text-align: center; font-weight: 700; }
+.resumo-linha { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.resumo-linha span:last-child { text-align: right; overflow-wrap: anywhere; }
+.resumo-linha.total { font-weight: 800; font-size: 1.1rem; border-top: 1px solid var(--cor-borda); margin-top: 6px; padding-top: 10px; }
+.sem-margem { margin: 0; }
+
+/* Acompanhamento do pedido (cliente) */
+.status-pedido { text-align: center; }
+.sobretitulo-cliente { color: var(--cor-primaria); font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+.status-grande { font-size: 1.5rem; font-weight: 800; margin-bottom: 6px; }
+.etapas { list-style: none; margin: 16px auto 4px; padding: 0; max-width: 260px; text-align: left; }
+.etapa { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: var(--cor-texto-suave); }
+.etapa::before { content: ""; width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; border: 2px solid var(--cor-borda); background: #fff; }
+.etapa.feita { color: var(--cor-texto); }
+.etapa.feita::before { background: var(--cor-sucesso); border-color: var(--cor-sucesso); }
+.etapa.atual { font-weight: 800; color: var(--cor-primaria); }
+.etapa.atual::before { background: var(--cor-primaria); border-color: var(--cor-primaria); }
+
+/* Painel de pedidos (restaurante) */
+.pedido-cartao.pedido-novo { border-color: var(--cor-primaria); box-shadow: 0 0 0 2px rgba(232, 69, 30, .18); }
+.pedido-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.pedido-cartao p { margin: 8px 0; overflow-wrap: anywhere; }
+.pedido-itens { margin: 8px 0; padding-left: 20px; }
+.pedido-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pedido-acoes .btn { flex: 1 1 140px; }
