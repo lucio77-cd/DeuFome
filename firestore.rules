@@ -1,20 +1,25 @@
 rules_version = '2';
 
-// Deu Fome — regras do Firestore (Etapa 3: pedidos)
-// Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar
+// Deu Fome — regras do Firestore (pedidos com acompanhamento público e avisos push)
+// Publicar: `firebase deploy --only firestore:rules` (veja firebase.json) ou colar em
+// Firebase Console > Firestore Database > Regras > Publicar. Sempre que o código mudar, publique junto.
 //
 // Modelo:
 //   restaurantes/{id}                      dados e configurações (leitura pública só se ativo)
 //   restaurantes/{id}/membros/{uid}        quem pode gerenciar (criado só pelo Mestre)
 //   restaurantes/{id}/categorias/{id}      categorias do cardápio (leitura pública só se ativas)
 //   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
-//   restaurantes/{id}/pedidos/{id}         pedidos: CRIADOS SÓ PELO SERVIDOR (/api/criar-pedido)
+//   restaurantes/{id}/pedidos/{id}         pedido COMPLETO (nome, telefone, endereço): só o restaurante lê;
+//                                          CRIADO SÓ PELO SERVIDOR (/api/criar-pedido)
+//   restaurantes/{id}/acompanhamento/{id}  versão PÚBLICA do pedido (sem dados pessoais): o cliente lê por "get"
+//   restaurantes/{id}/dispositivos/{token} aparelhos do restaurante para push (o servidor lê; o painel grava)
 //   restaurantes/{id}/contadores/...       número sequencial dos pedidos (só o servidor; negado aqui)
 //   usuarios/{uid}/restaurantes/{id}       índice privado de vínculos (escrito só pelo Mestre)
 //   _limites/...                           controle de abuso do servidor (negado aqui)
 //
-// Pedido: quem tem o endereço do pedido (ID aleatório de 24 caracteres) lê só aquele pedido ("get").
-// Listar pedidos é só do restaurante/Mestre. O restaurante só altera status (com transições válidas).
+// Pedido completo: só o restaurante/Mestre lê (get e list). O cliente acompanha pelo documento
+// "acompanhamento" (ID aleatório de 24 caracteres; sem listagem). O restaurante só altera status
+// (com transições válidas) e o motivo do cancelamento, sempre nos dois documentos juntos.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -55,6 +60,25 @@ service cloud.firestore {
       return (de == 'novo' && (para == 'preparando' || para == 'cancelado'))
         || (de == 'preparando' && (para == 'saiu_para_entrega' || para == 'cancelado'))
         || (de == 'saiu_para_entrega' && (para == 'entregue' || para == 'cancelado'));
+    }
+
+    // Motivo do cancelamento: opcional, texto de até 120 caracteres, e só junto com status "cancelado"
+    function motivoValido(data) {
+      return !('motivoCancelamento' in data)
+        || (data.status == 'cancelado'
+          && data.motivoCancelamento is string
+          && data.motivoCancelamento.size() <= 120);
+    }
+
+    // Mudança de status feita pelo restaurante (vale para pedidos e acompanhamento)
+    function mudancaDeStatusValida(restauranteId) {
+      return canManageRestaurant(restauranteId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'atualizadoEm', 'motivoCancelamento'])
+        && request.resource.data.status is string
+        && transicaoValida(resource.data.status, request.resource.data.status)
+        && motivoValido(request.resource.data)
+        && request.resource.data.atualizadoEm == request.time;
     }
 
     // ---------- Validações de dados ----------
@@ -133,19 +157,36 @@ service cloud.firestore {
       }
 
       match /pedidos/{pedidoId} {
-        // Cliente lê só o próprio pedido (precisa saber o ID aleatório); não consegue listar os pedidos
-        allow get: if true;
-        // Restaurante (e Mestre) listam e acompanham todos os pedidos do restaurante
-        allow list: if canManageRestaurant(restauranteId);
+        // Pedido completo tem nome, telefone e endereço: só o restaurante (e o Mestre) lê, um a um ou em lista.
+        // O cliente NÃO lê aqui: ele usa o documento "acompanhamento".
+        allow get, list: if canManageRestaurant(restauranteId);
         // Pedido NUNCA é criado pelo navegador: só o servidor (conta de serviço ignora estas regras)
         allow create: if false;
-        // Restaurante só muda o status, seguindo o andamento válido
-        allow update: if canManageRestaurant(restauranteId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm'])
-          && request.resource.data.status is string
-          && transicaoValida(resource.data.status, request.resource.data.status)
-          && request.resource.data.atualizadoEm == request.time;
+        // Restaurante só muda o status (andamento válido) e o motivo do cancelamento
+        allow update: if mudancaDeStatusValida(restauranteId);
         allow delete: if false;
+      }
+
+      match /acompanhamento/{pedidoId} {
+        // Versão pública do pedido, SEM dados pessoais. Quem tem o ID aleatório lê só aquele documento.
+        allow get: if true;
+        allow list: if false;
+        // Criado só pelo servidor, junto com o pedido
+        allow create: if false;
+        // O painel atualiza este documento no mesmo lote do pedido, para o cliente ver o status mudar
+        allow update: if mudancaDeStatusValida(restauranteId);
+        allow delete: if false;
+      }
+
+      match /dispositivos/{token} {
+        // Aparelhos que recebem push. Só o servidor lê (para enviar o aviso); o painel cadastra e remove.
+        allow read: if false;
+        allow create, update: if canManageRestaurant(restauranteId)
+          && request.resource.data.keys().hasOnly(['token', 'uid', 'atualizadoEm'])
+          && request.resource.data.token == token
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.atualizadoEm == request.time;
+        allow delete: if canManageRestaurant(restauranteId);
       }
     }
 

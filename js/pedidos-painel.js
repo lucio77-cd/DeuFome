@@ -254,8 +254,10 @@ async function mudarStatus(restauranteId, pedidoId, status, motivo) {
   try {
     await lote.commit();
   } catch (erro) {
-    // Pedido antigo, de antes do acompanhamento público: atualiza só o pedido
-    if (erro && erro.code === "not-found") await updateDoc(refPedido, dados);
+    // Pedido antigo, de antes do acompanhamento público: o documento não existe e o Firestore responde
+    // "not-found" ou, como as regras não conseguem avaliar um documento inexistente, "permission-denied".
+    // Nos dois casos tenta só o pedido; se a negação for real, ela se repete aqui e o erro aparece na tela.
+    if (erro && (erro.code === "not-found" || erro.code === "permission-denied")) await updateDoc(refPedido, dados);
     else throw erro;
   }
 }

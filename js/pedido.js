@@ -1,7 +1,9 @@
 // Deu Fome — acompanhamento do pedido pelo cliente, em tempo real. Endereço: /pedido?r=RESTAURANTE&p=PEDIDO
 // O endereço do pedido tem um código aleatório: guarde o link para voltar a ele.
+// Lê restaurantes/{r}/acompanhamento/{p}: versão pública do pedido, SEM telefone, endereço nem observação.
+// (O pedido completo, em "pedidos", só o restaurante lê. Veja firestore.rules.)
 import { db } from "./firebase-config.js";
-import { $, criar, formatarMoeda, formatarDataHora, formatarTelefone, ROTULO_STATUS, STATUS_PEDIDO, mensagemErroFirebase } from "./utils.js";
+import { $, criar, formatarMoeda, formatarDataHora, ROTULO_STATUS, STATUS_PEDIDO, mensagemErroFirebase } from "./utils.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const conteudo = $("#conteudo");
@@ -45,6 +47,11 @@ function desenhar(p) {
     criar("p", { class: "sobretitulo-cliente", texto: `${p.restauranteNome || "Restaurante"} · Pedido #${p.numero}` }),
     criar("p", { class: "status-grande", texto: ROTULO_STATUS[status] || status }),
     criar("p", { class: "texto-suave", texto: DESCRICAO[status] || "" }));
+  if (cancelado && p.motivoCancelamento) {
+    topo.append(criar("p", { class: "pedido-motivo", texto: `Motivo: ${p.motivoCancelamento}` }));
+  } else if (p.cancelamentoSolicitado === true && !cancelado) {
+    topo.append(criar("p", { class: "texto-suave", texto: "Você pediu o cancelamento. O restaurante vai responder em breve." }));
+  }
   if (!cancelado) {
     topo.append(criar("ol", { class: "etapas" },
       ...ETAPAS.map(([, rotulo], i) => criar("li", {
@@ -60,8 +67,7 @@ function desenhar(p) {
     linha("Entrega", p.taxaEntregaCentavos > 0 ? formatarMoeda(p.taxaEntregaCentavos) : "Grátis"),
     linha("Total", formatarMoeda(p.totalCentavos), "total"));
 
-  const cliente = p.cliente || {};
-  const entrega = p.entrega || {};
+  // Telefone, endereço e observação ficam só no pedido completo (privado). Aqui só o primeiro nome.
   const pagamento = p.pagamento || {};
   const detalhes = criar("section", { class: "card" },
     criar("h2", { texto: "Detalhes" }),
@@ -69,11 +75,7 @@ function desenhar(p) {
   if (pagamento.forma === "dinheiro" && pagamento.trocoParaCentavos) {
     detalhes.append(linha("Troco para", formatarMoeda(pagamento.trocoParaCentavos)));
   }
-  detalhes.append(
-    linha("Entregar para", `${cliente.nome || ""} · ${formatarTelefone(cliente.telefone)}`),
-    linha("Endereço", entrega.endereco || "—"));
-  if (entrega.referencia) detalhes.append(linha("Referência", entrega.referencia));
-  if (p.observacao) detalhes.append(linha("Observação", p.observacao));
+  if (p.primeiroNome) detalhes.append(linha("Entregar para", p.primeiroNome));
   detalhes.append(linha("Enviado em", formatarDataHora(p.criadoEm)));
 
   conteudo.replaceChildren(
@@ -91,7 +93,7 @@ function iniciar() {
     return aviso("Pedido não encontrado. Confira o endereço.");
   }
   const cancelar = onSnapshot(
-    doc(db, "restaurantes", restauranteId, "pedidos", pedidoId),
+    doc(db, "restaurantes", restauranteId, "acompanhamento", pedidoId),
     (snapshot) => {
       if (!snapshot.exists()) return aviso("Pedido não encontrado. Confira o endereço.");
       desenhar(snapshot.data());

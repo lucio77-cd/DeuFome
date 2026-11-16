@@ -22,7 +22,7 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 **Cliente (sem criar conta)**
 - No cardápio, **Adicionar** põe o item no carrinho (guardado no aparelho). Um restaurante por vez: ao trocar de restaurante, o app pergunta antes de esvaziar o carrinho.
 - `/carrinho`: altera quantidades e finaliza com nome, telefone, endereço, referência, observação e forma de pagamento (**na entrega**: dinheiro, cartão na maquininha ou Pix). Nome, telefone e endereço ficam lembrados neste aparelho para o próximo pedido.
-- `/pedido?r=RESTAURANTE&p=PEDIDO`: acompanhamento em tempo real (recebido, em preparo, saiu para entrega, entregue ou cancelado). O código do pedido é aleatório e funciona como endereço secreto: quem tem o link vê aquele pedido.
+- `/pedido?r=RESTAURANTE&p=PEDIDO`: acompanhamento em tempo real (recebido, em preparo, saiu para entrega, entregue ou cancelado). O código do pedido é aleatório e funciona como endereço secreto: quem tem o link vê o andamento, os itens e o valor, **sem telefone nem endereço** (esses ficam só no pedido completo, que só o restaurante lê).
 
 **Restaurante**
 - `/painel/pedidos`: pedidos chegando em tempo real, com aviso (mensagem, som se o navegador permitir e contador no título da aba). Botões para avançar o status (`novo → preparando → saiu para entrega → entregue`) ou cancelar. Mostra telefone, link do WhatsApp, endereço, itens, observação, pagamento e troco. **Deixe a página aberta** para receber os pedidos.
@@ -41,7 +41,7 @@ Ainda não inclui: cupons, pagamento online, cancelamento pelo cliente, notifica
 
 1. Em Authentication → Sign-in method, ative E-mail/senha.
 2. Em Authentication → Users, crie a conta do responsável por cada restaurante. Copie o UID e cole no painel Mestre.
-3. **Publique o conteúdo de `firestore.rules`** em Firestore Database → Regras. Sempre que o código mudar, publique as regras junto.
+3. **Publique o conteúdo de `firestore.rules`** (`firebase deploy --only firestore:rules`, usando o `firebase.json` do projeto, ou colando em Firestore Database → Regras). Sempre que o código mudar, publique as regras junto: sem as coleções `acompanhamento` e `dispositivos` nas regras, o painel não consegue mudar o status do pedido nem ativar os avisos.
 4. Confira se o UID Mestre em `js/firebase-config.js` (`MASTER_UID`) e em `firestore.rules` (função `isMaster()`) corresponde à conta principal.
 5. **Chave do servidor (Etapa 3):** no Firebase Console → Configurações do projeto → Contas de serviço → **Gerar nova chave privada** (baixa um JSON). Na Vercel → Settings → Environment Variables, crie `FIREBASE_SERVICE_ACCOUNT` e cole o conteúdo inteiro do JSON. Depois faça um novo deploy. **Essa chave dá acesso total ao banco: nunca coloque no GitHub nem em mensagens.** Se o pedido falhar com "Servidor sem configuração", a variável está ausente ou inválida.
 6. Faça deploy na Vercel e teste antes de divulgar. O `package.json` instala o `firebase-admin` para a função.
@@ -54,6 +54,7 @@ Ainda não inclui: cupons, pagamento online, cancelamento pelo cliente, notifica
 4. **Painel:** em outra aba, entre no `/painel/pedidos` com a conta do restaurante. O pedido aparece sozinho. Avance o status e veja a página do cliente mudar.
 5. **Segurança:** em um carrinho, pause o produto no `/painel` e tente enviar: deve recusar e tirar o item do carrinho. Confira também que `/pedido?r=...&p=` com um código inventado mostra "Pedido não encontrado".
 6. Para conferir uma regra isolada, use o **Rules Playground** no Console do Firebase.
+7. **Testes automáticos das regras** (precisam de Java e Node): `cd tests && npm install && npm test`. Eles sobem o emulador do Firestore e conferem pedido privado, acompanhamento público, troca de status e aparelhos de push. Rode antes de publicar qualquer mudança em `firestore.rules`.
 
 ## Fluxo de cadastro
 
@@ -70,7 +71,9 @@ Ainda não inclui: cupons, pagamento online, cancelamento pelo cliente, notifica
 - `restaurantes/{restauranteId}/membros/{uid}` — associação criada somente pelo Mestre.
 - `restaurantes/{restauranteId}/categorias/{categoriaId}` — categorias do cardápio (`nome`, `ativo`, `ordem`). Leitura pública só das ativas.
 - `restaurantes/{restauranteId}/produtos/{produtoId}` — produtos: `nome`, `descricao`, `precoCentavos`, `categoriaId`, `disponivel`, `ativo` (falso = arquivado). Leitura pública só dos ativos.
-- `restaurantes/{restauranteId}/pedidos/{pedidoId}` — pedidos (criados só pelo servidor): `numero`, `status`, `itens` (nome e preço copiados), `subtotalCentavos`, `taxaEntregaCentavos`, `totalCentavos`, `cliente`, `entrega`, `pagamento`, `observacao`. Cliente lê só pelo ID; restaurante lista e muda o status.
+- `restaurantes/{restauranteId}/pedidos/{pedidoId}` — pedidos (criados só pelo servidor): `numero`, `status`, `itens` (nome e preço copiados), `subtotalCentavos`, `taxaEntregaCentavos`, `totalCentavos`, `cliente`, `entrega`, `pagamento`, `observacao`. **Só o restaurante (e o Mestre) lê**; o restaurante muda o status e o motivo do cancelamento.
+- `restaurantes/{restauranteId}/acompanhamento/{pedidoId}` — versão pública do pedido, sem dados pessoais (`numero`, `status`, `primeiroNome`, `itens` com nome/quantidade/subtotal, valores, `pagamento`, `motivoCancelamento`). Criada junto com o pedido; o cliente lê só pelo ID (sem listagem) e o painel atualiza o status nos dois documentos no mesmo lote.
+- `restaurantes/{restauranteId}/dispositivos/{token}` — aparelhos do restaurante que recebem push. O painel cadastra e remove; só o servidor lê.
 - `restaurantes/{restauranteId}/contadores/pedidos` e `_limites/{hash}` — uso interno do servidor (negados ao navegador).
 - `usuarios/{uid}/restaurantes/{restauranteId}` — índice privado dos restaurantes vinculados ao usuário.
 
@@ -86,7 +89,8 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - O vínculo de usuário a restaurante só pode ser criado pelo Mestre. O UID ainda é copiado à mão do Console: um UID inexistente passa pelas regras.
 - O Mestre e o restaurante compartilham a mesma sessão do navegador.
 - O documento público do restaurante inclui o campo `criadoPor` (UID do Mestre, que já aparece no código do site). Não coloque dados privados nele.
-- **Pedido:** quem tem o link do pedido vê nome, telefone e endereço daquele pedido. O código tem 24 caracteres aleatórios, mas não compartilhe o link publicamente.
+- **Pedido:** quem tem o link do pedido vê só o acompanhamento (itens, valores, status e primeiro nome), nunca telefone nem endereço. O código tem 24 caracteres aleatórios, mas não compartilhe o link publicamente. Limitação conhecida: o código ainda é gerado no aparelho do cliente; o ideal é o servidor gerar o código de acesso.
+- **Pedidos antigos** (criados antes do acompanhamento público) não têm a versão pública: o cliente deles não vê mais o andamento, e o painel atualiza só o pedido completo.
 - O limite contra abuso é por telefone (5 pedidos a cada 10 minutos). Não há limite por IP nem captcha nesta versão.
 - Os preços do carrinho no aparelho servem só para exibição: o servidor recalcula tudo.
 - A chave `FIREBASE_SERVICE_ACCOUNT` fica somente na Vercel.
@@ -103,7 +107,9 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - `css/` — `base.css`, `painel.css`, `cliente.css`, `pedidos.css`.
 - `js/` — `firebase-config.js`, `utils.js`, `cliente.js`, `carrinho.js`, `praca.js`, `restaurante.js`, `carrinho-pagina.js`, `pedido.js`, `pedidos-painel.js`, `admin.js`, `painel.js`, `diagnostico.js`.
 - `package.json` — dependência `firebase-admin` da função.
-- `firestore.rules` — Regras de segurança.
-- `vercel.json` — Cabeçalhos de segurança (CSP sem script inline) e URLs limpas.
+- `firestore.rules` — Regras de segurança. `firebase.json` e `firestore.indexes.json` — deploy das regras e emulador.
+- `tests/` — Testes das regras no emulador do Firestore (`regras.test.mjs`), com `package.json` próprio.
+- `api/cancelar-pedido.js`, `api/_comum.js` — cancelamento pelo cliente (ainda sem tela) e utilidades das funções.
+- `vercel.json` — Cabeçalhos de segurança (CSP sem script inline), URLs limpas e região das funções (`gru1`, São Paulo).
 
 > As páginas públicas usam caminhos absolutos (`/js/...`, `/css/...`), que funcionam com `cleanUrls` e sem barra final. Os painéis `admin/` e `painel/` carregam os scripts com `../js/...`, e os links para `/painel/pedidos` são absolutos pelo mesmo motivo.
