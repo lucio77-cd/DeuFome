@@ -1,0 +1,13 @@
+{
+  "name": "Deu Fome — Pedidos",
+  "short_name": "Deu Fome",
+  "description": "Painel de pedidos do restaurante",
+  "start_url": "/painel/pedidos",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff7f0",
+  "theme_color": "#e8451e",
+  "icons": [
+    { "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
