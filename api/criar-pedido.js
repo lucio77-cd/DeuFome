@@ -2,43 +2,29 @@
 // O cliente manda só IDs e quantidades. Preço, taxa e total são calculados AQUI, lendo o Firestore
 // com a conta de serviço (variável de ambiente FIREBASE_SERVICE_ACCOUNT). As regras do Firestore
 // negam a criação de pedido pelo navegador: só esta função grava pedidos.
+//
+// Grava DOIS documentos na mesma transação:
+//   pedidos/{id}         — completo (nome, telefone, endereço...): só o restaurante lê
+//   acompanhamento/{id}  — público, SEM dados pessoais: é o que o cliente vê em /pedido
 
-const crypto = require("crypto");
-const { initializeApp, cert, getApps } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { FieldValue } = require("firebase-admin/firestore");
+const { ErroPedido, iniciarFirebase, hash, ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso } = require("./_comum");
 
 const FUSO = "America/Sao_Paulo";
 const FORMAS_PAGAMENTO = ["dinheiro", "cartao", "pix"];
 const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
-const JANELA_MS = 10 * 60 * 1000; // limite por telefone: no máximo 5 pedidos a cada 10 minutos
-const MAX_PEDIDOS_JANELA = 5;
+const JANELA_MS = 10 * 60 * 1000;     // janela dos limites contra abuso
+const MAX_PEDIDOS_TELEFONE = 5;       // por telefone, a cada 10 minutos
+const MAX_PEDIDOS_IP = 12;            // por IP, a cada 10 minutos (vários clientes podem dividir o mesmo Wi-Fi)
+const JANELA_PENDENTES_MS = 30 * 60 * 1000;
+const MAX_NOVOS_PENDENTES = 15;       // pedidos "novos" sem resposta nos últimos 30 minutos
 const MAX_POR_ITEM = 20;
 const MAX_UNIDADES = 60;
 const LIMITE_TOTAL_CENTAVOS = 2000000; // R$ 20.000,00
 
-class ErroPedido extends Error {
-  constructor(status, mensagem, extra = {}) {
-    super(mensagem);
-    this.status = status;
-    this.extra = extra;
-  }
-}
-
-function iniciarFirebase() {
-  if (getApps().length) return getFirestore();
-  let credencial;
-  try {
-    credencial = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "");
-  } catch (erro) {
-    throw new ErroPedido(500, "Servidor sem configuração: a variável FIREBASE_SERVICE_ACCOUNT está ausente ou inválida.");
-  }
-  if (credencial.private_key) credencial.private_key = credencial.private_key.replace(/\\n/g, "\n");
-  initializeApp({ credential: cert(credencial) });
-  return getFirestore();
-}
-
 // ---------- Horário de funcionamento (fuso de Brasília) ----------
+// ATENÇÃO: mesma regra de statusRestaurante() em js/cliente.js. Se mudar uma, mude a outra.
 function paraMinutos(hhmm) {
   const [h, m] = String(hhmm || "").split(":").map(Number);
   return Number.isInteger(h) && Number.isInteger(m) ? h * 60 + m : null;
@@ -62,26 +48,22 @@ function dentroDoHorario(abertura, fechamento) {
   return a < f ? n >= a && n < f : n >= a || n < f;
 }
 
-// ---------- Validação de texto ----------
-function texto(valor, campo, min, max) {
-  const t = String(valor == null ? "" : valor)
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (t.length < min || t.length > max) throw new ErroPedido(400, `Verifique o campo: ${campo}.`);
-  return t;
-}
-
-function lerCorpo(req) {
-  const corpo = req.body;
-  if (corpo && typeof corpo === "object") return corpo;
-  if (typeof corpo === "string") {
-    try { return JSON.parse(corpo); } catch (erro) { return {}; }
+// Conta mais um pedido na janela de 10 minutos. Estoura o limite -> erro 429.
+function contarJanela(snap, agora, maximo, mensagem) {
+  let janelaInicio = agora;
+  let contagem = 1;
+  if (snap.exists) {
+    const limite = snap.data();
+    if (agora - Number(limite.janelaInicio) < JANELA_MS) {
+      janelaInicio = Number(limite.janelaInicio);
+      contagem = Number(limite.contagem) + 1;
+      if (contagem > maximo) throw new ErroPedido(429, mensagem);
+    }
   }
-  return {};
+  return { janelaInicio, contagem };
 }
 
-async function criarPedido(db, corpo) {
+async function criarPedido(db, corpo, ip) {
   // ----- Dados enviados pelo cliente (tudo é validado de novo aqui) -----
   const restauranteId = String(corpo.restauranteId || "");
   if (!ID_RE.test(restauranteId)) throw new ErroPedido(400, "Restaurante inválido.");
@@ -92,6 +74,7 @@ async function criarPedido(db, corpo) {
   if (!Array.isArray(corpo.itens) || corpo.itens.length < 1 || corpo.itens.length > 40) {
     throw new ErroPedido(400, "O carrinho está vazio ou grande demais.");
   }
+  // Soma as quantidades por produto (o mesmo produto pode vir em linhas repetidas)
   const quantidades = new Map();
   for (const item of corpo.itens) {
     const produtoId = String((item && item.produtoId) || "");
@@ -135,14 +118,16 @@ async function criarPedido(db, corpo) {
   // ----- Referências -----
   const restRef = db.collection("restaurantes").doc(restauranteId);
   const pedidoRef = restRef.collection("pedidos").doc(pedidoId);
+  const acompRef = restRef.collection("acompanhamento").doc(pedidoId);
   const contadorRef = restRef.collection("contadores").doc("pedidos");
-  const limiteRef = db.collection("_limites").doc(crypto.createHash("sha256").update(telefone).digest("hex"));
+  const limiteTelRef = db.collection("_limites").doc("tel_" + hash(telefone));
+  const limiteIpRef = db.collection("_limites").doc("ip_" + hash(ip));
   const produtoRefs = [...quantidades.keys()].map((id) => restRef.collection("produtos").doc(id));
 
   // ----- Tudo em uma transação: lê preços atuais, confere regras e grava o pedido -----
   return db.runTransaction(async (t) => {
-    const [restSnap, pedidoSnap, contadorSnap, limiteSnap, ...produtoSnaps] =
-      await t.getAll(restRef, pedidoRef, contadorRef, limiteRef, ...produtoRefs);
+    const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, ...produtoSnaps] =
+      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs);
 
     // Mesmo código de pedido enviado de novo (rede ruim): devolve o pedido já criado, sem duplicar
     if (pedidoSnap.exists) {
@@ -158,19 +143,22 @@ async function criarPedido(db, corpo) {
       throw new ErroPedido(409, "O restaurante está fechado no momento.", { codigo: "fechado" });
     }
 
-    // Limite por telefone
+    // ----- Proteção contra abuso -----
     const agora = Date.now();
-    let janelaInicio = agora;
-    let contagem = 1;
-    if (limiteSnap.exists) {
-      const limite = limiteSnap.data();
-      if (agora - Number(limite.janelaInicio) < JANELA_MS) {
-        janelaInicio = Number(limite.janelaInicio);
-        contagem = Number(limite.contagem) + 1;
-        if (contagem > MAX_PEDIDOS_JANELA) {
-          throw new ErroPedido(429, "Muitos pedidos em pouco tempo. Aguarde alguns minutos e tente de novo.");
-        }
-      }
+    const janelaTel = contarJanela(limiteTelSnap, agora, MAX_PEDIDOS_TELEFONE,
+      "Muitos pedidos em pouco tempo. Aguarde alguns minutos e tente de novo.");
+    const janelaIp = contarJanela(limiteIpSnap, agora, MAX_PEDIDOS_IP,
+      "Muitos pedidos vindos desta conexão. Aguarde alguns minutos e tente de novo.");
+
+    // Muitos pedidos "novos" sem resposta nos últimos 30 min: o restaurante não está dando conta
+    // (ou alguém está inundando o painel). Só olha pedidos recentes, então testes antigos não travam nada.
+    const recentes = await t.get(restRef.collection("pedidos")
+      .where("criadoEm", ">=", new Date(agora - JANELA_PENDENTES_MS)).limit(60));
+    const pendentes = recentes.docs.filter((d) => d.data().status === "novo").length;
+    if (pendentes >= MAX_NOVOS_PENDENTES) {
+      throw new ErroPedido(429, "O restaurante está com muitos pedidos aguardando confirmação. Tente de novo em alguns minutos.", {
+        codigo: "muitos_pendentes"
+      });
     }
 
     // Produtos: precisam existir, estar ativos (não arquivados) e disponíveis (não pausados)
@@ -230,7 +218,10 @@ async function criarPedido(db, corpo) {
     // ----- Gravações (só depois de todas as leituras) -----
     const numero = (contadorSnap.exists ? Number(contadorSnap.data().ultimo) || 0 : 0) + 1;
     t.set(contadorRef, { ultimo: numero });
-    t.set(limiteRef, { janelaInicio, contagem, atualizadoEm: FieldValue.serverTimestamp() });
+    t.set(limiteTelRef, { janelaInicio: janelaTel.janelaInicio, contagem: janelaTel.contagem, atualizadoEm: FieldValue.serverTimestamp() });
+    t.set(limiteIpRef, { janelaInicio: janelaIp.janelaInicio, contagem: janelaIp.contagem, atualizadoEm: FieldValue.serverTimestamp() });
+
+    // Pedido completo: só o restaurante lê
     t.create(pedidoRef, {
       numero,
       status: "novo",
@@ -244,6 +235,23 @@ async function criarPedido(db, corpo) {
       entrega: { endereco, referencia },
       observacao,
       pagamento: { forma, trocoParaCentavos: trocoPara },
+      cancelamentoSolicitado: false,
+      criadoEm: FieldValue.serverTimestamp(),
+      atualizadoEm: FieldValue.serverTimestamp()
+    });
+
+    // Acompanhamento público: sem telefone, sem endereço, sem observação
+    t.create(acompRef, {
+      numero,
+      status: "novo",
+      restauranteNome: rest.nome,
+      primeiroNome: nome.split(" ")[0].slice(0, 30),
+      itens: itens.map((i) => ({ nome: i.nome, quantidade: i.quantidade, subtotalCentavos: i.subtotalCentavos })),
+      subtotalCentavos: subtotal,
+      taxaEntregaCentavos: taxa,
+      totalCentavos: total,
+      pagamento: { forma, trocoParaCentavos: trocoPara },
+      cancelamentoSolicitado: false,
       criadoEm: FieldValue.serverTimestamp(),
       atualizadoEm: FieldValue.serverTimestamp()
     });
@@ -259,7 +267,13 @@ module.exports = async function handler(req, res) {
   }
   try {
     const db = iniciarFirebase();
-    const resultado = await criarPedido(db, lerCorpo(req));
+    const corpo = lerCorpo(req);
+    const resultado = await criarPedido(db, corpo, ipDoCliente(req));
+    if (!resultado.duplicado) {
+      // Avisa o celular do restaurante (mesmo com o app fechado). Nunca derruba o pedido.
+      await enviarAviso(db, String(corpo.restauranteId), `Novo pedido #${resultado.numero}`,
+        `Total ${moeda(resultado.totalCentavos)}. Toque para abrir.`, origemDe(req));
+    }
     return res.status(resultado.duplicado ? 200 : 201).json({ ok: true, ...resultado });
   } catch (erro) {
     if (erro instanceof ErroPedido) {
