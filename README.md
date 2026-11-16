@@ -31,7 +31,8 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 - O navegador envia apenas IDs e quantidades. O servidor lê preço, taxa e disponibilidade no Firestore, confere se o restaurante está aberto, calcula o total e grava o pedido com o nome e o preço de cada item copiados (o histórico não muda se o cardápio mudar depois).
 - Recusa produto arquivado, pausado ou de categoria inativa, e total diferente do que o cliente viu (`preco_mudou`).
 - Número sequencial por restaurante (Pedido #1, #2...).
-- Cada pedido tem um código gerado no aparelho: se a rede falhar e o cliente reenviar, o pedido **não duplica**.
+- O aparelho manda uma chave de reenvio: se a rede falhar e o cliente reenviar, o pedido **não duplica**. O código secreto do pedido (o do link de acompanhamento) é **gerado pelo servidor** a partir dessa chave com um segredo só dele; o navegador não escolhe nem adivinha o código.
+- O aviso push ao restaurante segue em segundo plano (`waitUntil` da Vercel) e não atrasa a resposta ao cliente.
 - Limite de **5 pedidos por telefone a cada 10 minutos**.
 - As regras do Firestore **negam** a criação de pedido pelo navegador; só o servidor grava.
 
@@ -89,7 +90,7 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - O vínculo de usuário a restaurante só pode ser criado pelo Mestre. O UID ainda é copiado à mão do Console: um UID inexistente passa pelas regras.
 - O Mestre e o restaurante compartilham a mesma sessão do navegador.
 - O documento público do restaurante inclui o campo `criadoPor` (UID do Mestre, que já aparece no código do site). Não coloque dados privados nele.
-- **Pedido:** quem tem o link do pedido vê só o acompanhamento (itens, valores, status e primeiro nome), nunca telefone nem endereço. O código tem 24 caracteres aleatórios, mas não compartilhe o link publicamente. Limitação conhecida: o código ainda é gerado no aparelho do cliente; o ideal é o servidor gerar o código de acesso.
+- **Pedido:** quem tem o link do pedido vê só o acompanhamento (itens, valores, status e primeiro nome), nunca telefone nem endereço. O código tem 32 caracteres, gerado pelo servidor e impossível de adivinhar, mas não compartilhe o link publicamente. Pedidos criados antes dessa versão mantêm o código antigo (de 24 caracteres) e continuam funcionando.
 - **Pedidos antigos** (criados antes do acompanhamento público) não têm a versão pública: o cliente deles não vê mais o andamento, e o painel atualiza só o pedido completo.
 - O limite contra abuso é por telefone (5 pedidos a cada 10 minutos). Não há limite por IP nem captcha nesta versão.
 - Os preços do carrinho no aparelho servem só para exibição: o servidor recalcula tudo.
@@ -109,7 +110,7 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - `package.json` — dependência `firebase-admin` da função.
 - `firestore.rules` — Regras de segurança. `firebase.json` e `firestore.indexes.json` — deploy das regras e emulador.
 - `tests/` — Testes das regras no emulador do Firestore (`regras.test.mjs`), com `package.json` próprio.
-- `api/cancelar-pedido.js`, `api/_comum.js` — cancelamento pelo cliente (ainda sem tela) e utilidades das funções.
+- `api/cancelar-pedido.js`, `api/_comum.js`, `api/_id-pedido.js` — cancelamento pelo cliente (ainda sem tela), utilidades das funções e geração do código público do pedido.
 - `vercel.json` — Cabeçalhos de segurança (CSP sem script inline), URLs limpas e região das funções (`gru1`, São Paulo).
 
 > As páginas públicas usam caminhos absolutos (`/js/...`, `/css/...`), que funcionam com `cleanUrls` e sem barra final. Os painéis `admin/` e `painel/` carregam os scripts com `../js/...`, e os links para `/painel/pedidos` são absolutos pelo mesmo motivo.

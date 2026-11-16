@@ -6,9 +6,16 @@
 // Grava DOIS documentos na mesma transação:
 //   pedidos/{id}         — completo (nome, telefone, endereço...): só o restaurante lê
 //   acompanhamento/{id}  — público, SEM dados pessoais: é o que o cliente vê em /pedido
+//
+// O {id} (código secreto do link de acompanhamento) é gerado AQUI, derivado da "chave" de reenvio que o
+// navegador manda (campo "chave"; "pedidoId" ainda é aceito por compatibilidade com páginas antigas em cache).
+// O navegador nunca escolhe o código; a resposta traz o código para o cliente abrir /pedido.
 
 const { FieldValue } = require("firebase-admin/firestore");
-const { ErroPedido, iniciarFirebase, hash, ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso } = require("./_comum");
+const {
+  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
+  ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
+} = require("./_comum");
 
 const FUSO = "America/Sao_Paulo";
 const FORMAS_PAGAMENTO = ["dinheiro", "cartao", "pix"];
@@ -68,8 +75,10 @@ async function criarPedido(db, corpo, ip) {
   const restauranteId = String(corpo.restauranteId || "");
   if (!ID_RE.test(restauranteId)) throw new ErroPedido(400, "Restaurante inválido.");
 
-  const pedidoId = String(corpo.pedidoId || "");
-  if (!PEDIDO_ID_RE.test(pedidoId)) throw new ErroPedido(400, "Código do pedido inválido. Recarregue a página.");
+  // Chave de reenvio vinda do navegador (só evita pedido duplicado). O código público é derivado dela no servidor.
+  const chave = String(corpo.chave || corpo.pedidoId || "");
+  if (!PEDIDO_ID_RE.test(chave)) throw new ErroPedido(400, "Código do pedido inválido. Recarregue a página.");
+  const pedidoId = idPublicoDoPedido(restauranteId, chave);
 
   if (!Array.isArray(corpo.itens) || corpo.itens.length < 1 || corpo.itens.length > 40) {
     throw new ErroPedido(400, "O carrinho está vazio ou grande demais.");
@@ -270,9 +279,11 @@ module.exports = async function handler(req, res) {
     const corpo = lerCorpo(req);
     const resultado = await criarPedido(db, corpo, ipDoCliente(req));
     if (!resultado.duplicado) {
-      // Avisa o celular do restaurante (mesmo com o app fechado). Nunca derruba o pedido.
-      await enviarAviso(db, String(corpo.restauranteId), `Novo pedido #${resultado.numero}`,
-        `Total ${moeda(resultado.totalCentavos)}. Toque para abrir.`, origemDe(req));
+      // Avisa o celular do restaurante (mesmo com o app fechado). Na Vercel, o aviso segue em segundo plano
+      // enquanto o cliente já recebe a resposta; sem waitUntil, espera terminar antes de responder.
+      // Nunca derruba o pedido: erros do aviso só vão para o log.
+      await emSegundoPlano(enviarAviso(db, String(corpo.restauranteId), `Novo pedido #${resultado.numero}`,
+        `Total ${moeda(resultado.totalCentavos)}. Toque para abrir.`, origemDe(req)));
     }
     return res.status(resultado.duplicado ? 200 : 201).json({ ok: true, ...resultado });
   } catch (erro) {

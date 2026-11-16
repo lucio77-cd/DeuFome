@@ -176,7 +176,7 @@ async function enviar() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pedidoId: pedidoIdPendente,
+        chave: pedidoIdPendente, // só evita duplicar no reenvio; o código do pedido vem do servidor na resposta
         restauranteId: carrinho.restauranteId,
         itens: carrinho.itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade })),
         cliente: { nome, telefone },

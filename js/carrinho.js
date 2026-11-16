@@ -116,7 +116,8 @@ export function salvarCliente(dados) {
   try { localStorage.setItem(CHAVE_CLIENTE, JSON.stringify(dados)); } catch (erro) { /* ignora */ }
 }
 
-// Código do pedido (24 caracteres aleatórios). Serve de endereço secreto do pedido e evita pedido duplicado.
+// Chave de reenvio do pedido (24 caracteres aleatórios): evita pedido duplicado se a rede falhar.
+// NÃO é o endereço do pedido: o código secreto de acompanhamento é gerado pelo servidor (api/_id-pedido.js).
 export function novoPedidoId() {
   const bytes = new Uint8Array(12);
   if (window.crypto && window.crypto.getRandomValues) {

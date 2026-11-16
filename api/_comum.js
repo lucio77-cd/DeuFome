@@ -5,6 +5,8 @@ const crypto = require("crypto");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { waitUntil } = require("@vercel/functions");
+const { derivarIdPedido } = require("./_id-pedido");
 
 class ErroPedido extends Error {
   constructor(status, mensagem, extra = {}) {
@@ -39,6 +41,28 @@ function iniciarFirebase() {
 function hash(valor) {
   if (!segredo) throw new ErroPedido(500, "Servidor sem configuração.");
   return crypto.createHmac("sha256", segredo).update(String(valor)).digest("hex");
+}
+
+// Código público do pedido (o que vai na URL de acompanhamento), gerado aqui e não no aparelho do cliente.
+// A mesma chave de reenvio dá sempre o mesmo código, então reenviar não duplica o pedido.
+function idPublicoDoPedido(restauranteId, chave) {
+  if (!segredo) throw new ErroPedido(500, "Servidor sem configuração.");
+  return derivarIdPedido(segredo, restauranteId, chave);
+}
+
+// Roda uma tarefa de segundo plano (ex.: push) sem atrasar a resposta ao cliente.
+// Na Vercel usa waitUntil: volta na hora e a função fica viva até a tarefa terminar, mesmo depois da resposta.
+// Se o ambiente não oferecer waitUntil, esta função espera a tarefa terminar (quem chama deve responder
+// só depois): fica mais lento, mas nenhum aviso se perde. Chame ANTES de enviar a resposta HTTP.
+async function emSegundoPlano(tarefa) {
+  const promessa = Promise.resolve(tarefa).catch((erro) => console.error("segundo plano:", erro && erro.message));
+  let temWaitUntil = false;
+  try {
+    const contexto = globalThis[Symbol.for("@vercel/request-context")];
+    temWaitUntil = typeof (contexto && contexto.get && contexto.get() && contexto.get().waitUntil) === "function";
+  } catch (erro) { /* sem contexto da Vercel */ }
+  if (temWaitUntil) waitUntil(promessa);
+  else await promessa;
 }
 
 // IP do cliente. Na Vercel, x-vercel-forwarded-for / x-forwarded-for são definidos pela própria Vercel.
@@ -107,4 +131,7 @@ async function enviarAviso(db, restauranteId, titulo, mensagem, origem) {
   }
 }
 
-module.exports = { ErroPedido, iniciarFirebase, hash, ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso };
+module.exports = {
+  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
+  ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
+};

@@ -5,7 +5,7 @@
 //   depois disso        -> recusa
 
 const { FieldValue } = require("firebase-admin/firestore");
-const { ErroPedido, iniciarFirebase, lerCorpo, origemDe, enviarAviso } = require("./_comum");
+const { ErroPedido, iniciarFirebase, lerCorpo, origemDe, enviarAviso, emSegundoPlano } = require("./_comum");
 
 const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
@@ -57,11 +57,11 @@ module.exports = async function handler(req, res) {
     const corpo = lerCorpo(req);
     const resultado = await cancelar(db, corpo);
     if (resultado.resultado === "cancelado") {
-      await enviarAviso(db, String(corpo.restauranteId), `Pedido #${resultado.numero} cancelado`,
-        "O cliente cancelou o pedido.", origemDe(req));
+      await emSegundoPlano(enviarAviso(db, String(corpo.restauranteId), `Pedido #${resultado.numero} cancelado`,
+        "O cliente cancelou o pedido.", origemDe(req)));
     } else if (resultado.resultado === "solicitado") {
-      await enviarAviso(db, String(corpo.restauranteId), `Pedido #${resultado.numero}: cancelamento pedido`,
-        "O cliente quer cancelar. Abra o painel para decidir.", origemDe(req));
+      await emSegundoPlano(enviarAviso(db, String(corpo.restauranteId), `Pedido #${resultado.numero}: cancelamento pedido`,
+        "O cliente quer cancelar. Abra o painel para decidir.", origemDe(req)));
     }
     return res.status(200).json({ ok: true, ...resultado });
   } catch (erro) {
