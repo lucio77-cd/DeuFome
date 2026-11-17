@@ -1,7 +1,8 @@
 // Deu Fome — testes do firestore.rules no emulador do Firestore.
 // Rodar (precisa de Java e Node): cd tests && npm install && npm test
 // O que cobre: o pedido completo (com telefone e endereço) é privado, o acompanhamento é público
-// sem listagem, só o restaurante certo muda status (transição válida) e os aparelhos de push.
+// sem listagem, NINGUÉM grava pedido/acompanhamento/resumo pelo navegador (só as funções /api), o resumo
+// diário é lido só pelo restaurante certo, e os aparelhos de push.
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -77,28 +78,29 @@ test("pedido nunca é criado nem apagado pelo navegador", async () => {
   await assertFails(deleteDoc(acompRef(como(DONO_A))));
 });
 
-test("restaurante muda o status nos dois documentos, com transição válida", async () => {
-  await assertSucceeds(mudar(como(DONO_A), REST_A, { status: "preparando" }));
-  await assertSucceeds(mudar(como(DONO_A), REST_A, { status: "saiu_para_entrega" }));
-  await assertSucceeds(mudar(como(DONO_A), REST_A, { status: "entregue" }));
-  await assertFails(mudar(como(DONO_A), REST_A, { status: "cancelado" })); // entregue não cancela
-});
-
-test("transição inválida e dono de outro restaurante são negados", async () => {
-  await assertFails(mudar(como(DONO_A), REST_A, { status: "entregue" })); // pulou etapas
-  await assertFails(mudar(como(DONO_B), REST_A, { status: "preparando" }));
+test("NINGUÉM muda pedido nem acompanhamento pelo navegador (só o servidor, via /api/atualizar-status)", async () => {
+  await assertFails(mudar(como(DONO_A), REST_A, { status: "preparando" })); // nem o dono, nem com transição válida
+  await assertFails(mudar(como(MESTRE), REST_A, { status: "preparando" }));
+  await assertFails(mudar(como(DONO_A), REST_A, { status: "cancelado", motivoCancelamento: "x" }));
+  await assertFails(updateDoc(pedidoRef(como(DONO_A)), { status: "preparando", atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(acompRef(como(DONO_A)), { status: "preparando", atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(pedidoRef(como(DONO_A)), { totalCentavos: 1 }));
   await assertFails(mudar(anonimo(), REST_A, { status: "preparando" }));
 });
 
-test("cancelamento com motivo: só com status cancelado e até 120 caracteres", async () => {
-  await assertSucceeds(mudar(como(DONO_A), REST_A, { status: "cancelado", motivoCancelamento: "Sem ingrediente" }));
-  await assertFails(mudar(como(DONO_A), REST_A, { status: "preparando", motivoCancelamento: "x" }));
-  await assertFails(mudar(como(DONO_A), REST_A, { status: "cancelado", motivoCancelamento: "x".repeat(121) }));
-});
-
-test("restaurante não altera outros campos do pedido nem do acompanhamento", async () => {
-  await assertFails(mudar(como(DONO_A), REST_A, { status: "preparando", totalCentavos: 1 }));
-  await assertFails(updateDoc(pedidoRef(como(DONO_A)), { cancelamentoSolicitado: true, atualizadoEm: serverTimestamp() }));
+test("resumos diários: o restaurante só lê; ninguém grava; outro restaurante e anônimo não leem", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "restaurantes", REST_A, "resumos", "2026-11-17"), { dia: "2026-11-17", pedidos: 3 });
+  });
+  const resumo = (db, r = REST_A) => doc(db, "restaurantes", r, "resumos", "2026-11-17");
+  await assertSucceeds(getDoc(resumo(como(DONO_A))));
+  await assertSucceeds(getDoc(resumo(como(MESTRE))));
+  await assertSucceeds(getDocs(collection(como(DONO_A), "restaurantes", REST_A, "resumos")));
+  await assertFails(getDoc(resumo(como(DONO_B))));
+  await assertFails(getDoc(resumo(anonimo())));
+  await assertFails(setDoc(resumo(como(DONO_A)), { dia: "2026-11-17", pedidos: 999 }));
+  await assertFails(updateDoc(resumo(como(DONO_A)), { pedidos: 999 }));
+  await assertFails(deleteDoc(resumo(como(DONO_A))));
 });
 
 test("dispositivos de push: o dono cadastra o próprio aparelho; ninguém lê", async () => {

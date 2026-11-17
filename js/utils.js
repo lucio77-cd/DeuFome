@@ -153,6 +153,26 @@ export function mensagemErroFirebase(erro) {
   return mapa[codigo] || (erro && erro.message) || "Erro desconhecido.";
 }
 
+// Chama uma função do servidor (/api/...). Com "token" (usuario.getIdToken()) manda o login do painel.
+// Erros do servidor viram Error com a mensagem em português que a própria API devolveu.
+export async function chamarApi(caminho, corpo, token) {
+  const cabecalhos = { "Content-Type": "application/json" };
+  if (token) cabecalhos.Authorization = `Bearer ${token}`;
+  let resposta;
+  try {
+    resposta = await fetch(caminho, { method: "POST", headers: cabecalhos, body: JSON.stringify(corpo || {}) });
+  } catch (erro) {
+    throw new Error("Sem conexão com o servidor. Verifique a internet e tente de novo.");
+  }
+  const dados = await resposta.json().catch(() => ({}));
+  if (!resposta.ok) {
+    const falha = new Error(dados.erro || "Não foi possível concluir. Tente de novo.");
+    falha.dados = dados;
+    throw falha;
+  }
+  return dados;
+}
+
 // Cria um elemento sem usar innerHTML: criar("div", { class: "x", texto: "oi" }, filho1, filho2)
 // Atributos especiais: class, texto (textContent) e data-*; o resto vira propriedade (type, value...)
 export function criar(tag, atributos = {}, ...filhos) {

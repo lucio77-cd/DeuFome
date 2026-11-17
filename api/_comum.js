@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getAuth } = require("firebase-admin/auth");
 const { waitUntil } = require("@vercel/functions");
 const { derivarIdPedido } = require("./_id-pedido");
 
@@ -63,6 +64,32 @@ async function emSegundoPlano(tarefa) {
   } catch (erro) { /* sem contexto da Vercel */ }
   if (temWaitUntil) waitUntil(promessa);
   else await promessa;
+}
+
+// ---------- Quem está chamando (painel do restaurante) ----------
+// ATENÇÃO: mesmo UID do isMaster() em firestore.rules. Se mudar um, mude o outro.
+const MASTER_UID = "KZhENlWEtPNO5w2t6pgh8NTE0wW2";
+
+// Confere o login (token do Firebase Auth enviado em "Authorization: Bearer ...") e devolve o UID.
+async function usuarioDaRequisicao(req) {
+  const m = /^Bearer (.+)$/.exec(String((req.headers || {}).authorization || ""));
+  if (!m) throw new ErroPedido(401, "Entre na conta do restaurante para continuar.");
+  try {
+    return (await getAuth().verifyIdToken(m[1])).uid;
+  } catch (erro) {
+    throw new ErroPedido(401, "Sua sessão expirou. Entre de novo no painel.");
+  }
+}
+
+// Só o Mestre ou um membro ATIVO de um restaurante ATIVO pode agir naquele restaurante
+// (mesma regra de canManageRestaurant() em firestore.rules).
+async function exigirGestor(db, uid, restauranteId) {
+  if (uid === MASTER_UID) return;
+  const restRef = db.collection("restaurantes").doc(restauranteId);
+  const [rest, membro] = await Promise.all([restRef.get(), restRef.collection("membros").doc(uid).get()]);
+  if (!rest.exists || rest.data().ativo !== true || !membro.exists || membro.data().ativo !== true) {
+    throw new ErroPedido(403, "Esta conta não tem permissão neste restaurante.");
+  }
 }
 
 // IP do cliente. Na Vercel, x-vercel-forwarded-for / x-forwarded-for são definidos pela própria Vercel.
@@ -133,5 +160,6 @@ async function enviarAviso(db, restauranteId, titulo, mensagem, origem) {
 
 module.exports = {
   ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
+  MASTER_UID, usuarioDaRequisicao, exigirGestor,
   ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
 };

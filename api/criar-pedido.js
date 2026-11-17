@@ -16,6 +16,8 @@ const {
   ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
   ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
 } = require("./_comum");
+const { gravarResumo } = require("./_status");
+const { diaSP } = require("./_status-regras");
 
 const FUSO = "America/Sao_Paulo";
 const FORMAS_PAGAMENTO = ["dinheiro", "cartao", "pix"];
@@ -230,7 +232,11 @@ async function criarPedido(db, corpo, ip) {
     t.set(limiteTelRef, { janelaInicio: janelaTel.janelaInicio, contagem: janelaTel.contagem, atualizadoEm: FieldValue.serverTimestamp() });
     t.set(limiteIpRef, { janelaInicio: janelaIp.janelaInicio, contagem: janelaIp.contagem, atualizadoEm: FieldValue.serverTimestamp() });
 
-    // Pedido completo: só o restaurante lê
+    // Pedido completo: só o restaurante lê.
+    // resumoContado: este pedido entra no resumo diário (pedidos antigos, sem a marca, ficam de fora).
+    // resumoDia: o dia (Brasília) do resumo onde ele foi contado; entrega e cancelamento somam no mesmo dia.
+    const criadoEmData = new Date();
+    const resumoDia = diaSP(criadoEmData);
     t.create(pedidoRef, {
       numero,
       status: "novo",
@@ -245,9 +251,12 @@ async function criarPedido(db, corpo, ip) {
       observacao,
       pagamento: { forma, trocoParaCentavos: trocoPara },
       cancelamentoSolicitado: false,
+      resumoContado: true,
+      resumoDia,
       criadoEm: FieldValue.serverTimestamp(),
       atualizadoEm: FieldValue.serverTimestamp()
     });
+    gravarResumo(t, restRef, { resumoContado: true, resumoDia }, { tipo: "criado" }, criadoEmData);
 
     // Acompanhamento público: sem telefone, sem endereço, sem observação
     t.create(acompRef, {

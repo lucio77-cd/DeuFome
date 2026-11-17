@@ -2,10 +2,10 @@
 // "Em andamento" é escutado ao vivo; o histórico (pedidos encerrados) é carregado por dia.
 // A tela só mostra/esconde; quem protege os dados é o firestore.rules.
 import { auth, db } from "./firebase-config.js";
-import { $, criar, formatarMoeda, formatarDataHora, formatarTelefone, ROTULO_STATUS, STATUS_PEDIDO, executar, mensagemErroFirebase, toast } from "./utils.js";
+import { $, criar, formatarMoeda, formatarDataHora, formatarTelefone, ROTULO_STATUS, STATUS_PEDIDO, executar, mensagemErroFirebase, toast, chamarApi } from "./utils.js";
 import { suportado, permissao, ativar, desativar, sincronizar } from "./notificacoes.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const lista = $("#lista");
 const listaHistorico = $("#listaHistorico");
@@ -92,11 +92,12 @@ function cartao(p) {
     criar("p", { texto: `💳 ${FORMAS[pagamento.forma] || "—"}${troco}` }),
     p.status === STATUS_PEDIDO.CANCELADO && p.motivoCancelamento
       ? criar("p", { class: "pedido-motivo", texto: `Motivo do cancelamento: ${p.motivoCancelamento}` }) : "",
-    proximo
-      ? criar("div", { class: "pedido-acoes" },
+    criar("div", { class: "pedido-acoes" },
+      ...(proximo ? [
         criar("button", { class: "btn", type: "button", texto: proximo.rotulo, "data-pedido": p.id, "data-status": proximo.status }),
-        criar("button", { class: "btn btn-perigo", type: "button", texto: "Cancelar", "data-pedido": p.id, "data-status": STATUS_PEDIDO.CANCELADO }))
-      : ""
+        criar("button", { class: "btn btn-perigo", type: "button", texto: "Cancelar", "data-pedido": p.id, "data-status": STATUS_PEDIDO.CANCELADO })
+      ] : []),
+      criar("button", { class: "btn btn-secundario", type: "button", texto: "🖨️ Imprimir", "data-imprimir": "1" }))
   );
 }
 
@@ -242,27 +243,34 @@ $("#btnAvisos").addEventListener("click", (evento) => {
 });
 
 // ---------- Mudar status / cancelar ----------
-// Atualiza o pedido E o acompanhamento público no mesmo lote (o cliente vê o status mudar).
+// Quem muda o status é o SERVIDOR (/api/atualizar-status): ele atualiza o pedido, o acompanhamento público
+// e o resumo diário na mesma transação. O navegador não grava mais nessas coleções (firestore.rules nega).
 async function mudarStatus(restauranteId, pedidoId, status, motivo) {
-  const dados = { status, atualizadoEm: serverTimestamp() };
-  if (motivo) dados.motivoCancelamento = motivo;
-  const refPedido = doc(db, "restaurantes", restauranteId, "pedidos", pedidoId);
-  const refAcompanhamento = doc(db, "restaurantes", restauranteId, "acompanhamento", pedidoId);
-  const lote = writeBatch(db);
-  lote.update(refPedido, dados);
-  lote.update(refAcompanhamento, dados);
-  try {
-    await lote.commit();
-  } catch (erro) {
-    // Pedido antigo, de antes do acompanhamento público: o documento não existe e o Firestore responde
-    // "not-found" ou, como as regras não conseguem avaliar um documento inexistente, "permission-denied".
-    // Nos dois casos tenta só o pedido; se a negação for real, ela se repete aqui e o erro aparece na tela.
-    if (erro && (erro.code === "not-found" || erro.code === "permission-denied")) await updateDoc(refPedido, dados);
-    else throw erro;
-  }
+  if (!auth.currentUser) throw new Error("Entre de novo no painel.");
+  const token = await auth.currentUser.getIdToken();
+  await chamarApi("/api/atualizar-status", { restauranteId, pedidoId, status, motivo }, token);
+}
+
+// Imprime só este pedido (o CSS de impressão esconde o resto da página). Funciona em impressora comum
+// e em impressora térmica instalada no celular/computador.
+function imprimirPedido(cartaoPedido) {
+  cartaoPedido.classList.add("imprimir");
+  document.body.classList.add("imprimindo");
+  const limpar = () => {
+    cartaoPedido.classList.remove("imprimir");
+    document.body.classList.remove("imprimindo");
+    window.removeEventListener("afterprint", limpar);
+  };
+  window.addEventListener("afterprint", limpar);
+  window.print();
 }
 
 function aoClicarNosPedidos(evento) {
+  const imprimir = evento.target.closest("button[data-imprimir]");
+  if (imprimir) {
+    imprimirPedido(imprimir.closest(".pedido-cartao"));
+    return;
+  }
   const botao = evento.target.closest("button[data-pedido]");
   if (!botao || !restauranteAtual) return;
   const { pedido, status } = botao.dataset;
@@ -276,6 +284,7 @@ function aoClicarNosPedidos(evento) {
   executar(botao, () => mudarStatus(restauranteId, pedido, status, motivo));
 }
 lista.addEventListener("click", aoClicarNosPedidos);
+listaHistorico.addEventListener("click", aoClicarNosPedidos);
 
 $("#seletorRestaurante").addEventListener("change", (evento) => iniciarEscuta(evento.target.value));
 $("#btnHistorico").addEventListener("click", carregarHistorico);

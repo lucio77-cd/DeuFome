@@ -45,3 +45,17 @@
 .pedido-itens { margin: 8px 0; padding-left: 20px; }
 .pedido-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .pedido-acoes .btn { flex: 1 1 140px; }
+.pedido-motivo { color: var(--cor-erro); }
+
+/* Impressão de um pedido (botão "Imprimir"): sai SÓ o cartão marcado com .imprimir, sem botões e sem folhas
+   em branco. Tudo que não contém o cartão nem está dentro dele sai do layout (display:none). */
+@media print {
+  body.imprimindo *:not(:has(.imprimir)):not(.imprimir):not(.imprimir *) { display: none !important; }
+  body.imprimindo, body.imprimindo main { background: #fff; padding: 0; margin: 0; max-width: none; }
+  body.imprimindo .pedido-cartao.imprimir {
+    margin: 0; padding: 0; border: 0; box-shadow: none; background: #fff; color: #000; font-size: 13pt;
+  }
+  body.imprimindo .pedido-cartao.imprimir .pedido-acoes { display: none !important; }
+  body.imprimindo .pedido-cartao.imprimir a { color: #000; text-decoration: none; }
+  @page { margin: 6mm; }
+}

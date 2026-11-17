@@ -6,6 +6,7 @@
 
 const { FieldValue } = require("firebase-admin/firestore");
 const { ErroPedido, iniciarFirebase, lerCorpo, origemDe, enviarAviso, emSegundoPlano } = require("./_comum");
+const { gravarResumo } = require("./_status");
 
 const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
@@ -42,6 +43,7 @@ async function cancelar(db, corpo) {
 
     t.update(pedidoRef, dados);
     if (acompSnap.exists) t.update(acompRef, dados); // pedidos antigos podem não ter o acompanhamento
+    if (dados.status === "cancelado") gravarResumo(t, restRef, pedido, { tipo: "status", para: "cancelado" });
     return resultado;
   });
 }
