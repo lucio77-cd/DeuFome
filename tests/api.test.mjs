@@ -213,3 +213,54 @@ test("vários pedidos no mesmo dia acumulam no mesmo resumo", async () => {
   assert.equal(r.faturamentoCentavos, 8200);
   assert.equal(r.produtos.p1.quantidade, 4);
 });
+
+// ---------- Etapa 5: custo congelado no pedido ----------
+const receita = (produtoId, custoMicro) => banco.gravar(`${R}/receitas/${produtoId}`, { itens: [], custoExtraMicro: 0, custoMicro });
+
+test("o pedido grava o custo de cada item no momento da venda, e o cliente não vê custo nenhum", async () => {
+  receita("p1", 4500000); // X-Salada custa R$ 4,50
+  receita("p2", 1200000); // Suco custa R$ 1,20
+  const id = await novoPedido();
+  const p = pedidoDoc(id);
+  assert.equal(p.custoCompleto, true);
+  assert.equal(p.custoTotalMicro, 2 * 4500000 + 1200000);
+  assert.deepEqual(p.itens.map((i) => i.custoUnitarioMicro), [4500000, 1200000]);
+  const publico = JSON.stringify(acompDoc(id));
+  assert.ok(!/custo/i.test(publico), "o acompanhamento público não pode ter custo");
+});
+
+test("subir o preço do ingrediente NÃO muda o lucro dos pedidos antigos (teste do queijo)", async () => {
+  receita("p1", 4500000);
+  receita("p2", 1200000);
+  const antigo = await novoPedido(1);
+  receita("p1", 9000000); // o queijo subiu: o X-Salada passou a custar R$ 9,00
+  const novo = await novoPedido(2);
+  assert.equal(pedidoDoc(antigo).custoTotalMicro, 2 * 4500000 + 1200000); // continua o custo da época
+  assert.equal(pedidoDoc(novo).custoTotalMicro, 2 * 9000000 + 1200000);
+  await ate(antigo, "preparando", "saiu_para_entrega", "entregue");
+  await ate(novo, "preparando", "saiu_para_entrega", "entregue");
+  const r = resumo();
+  assert.equal(r.custoMicro, (2 * 4500000 + 1200000) + (2 * 9000000 + 1200000));
+  assert.equal(r.pedidosComCusto, 2);
+});
+
+test("produto sem receita: pedido fica com custo incompleto e fora da margem", async () => {
+  receita("p1", 4500000); // p2 (Suco) sem receita
+  const id = await novoPedido();
+  const p = pedidoDoc(id);
+  assert.equal(p.custoCompleto, false);
+  assert.equal(p.custoTotalMicro, null);
+  assert.equal(p.itens[1].custoUnitarioMicro, null);
+  await ate(id, "preparando", "saiu_para_entrega", "entregue");
+  assert.equal(resumo().entregues, 1);
+  assert.equal(resumo().pedidosComCusto, undefined);
+  assert.equal(resumo().custoMicro, undefined);
+});
+
+test("receita com custo inválido (texto, negativo, quebrado) é ignorada em vez de quebrar o pedido", async () => {
+  banco.gravar(`${R}/receitas/p1`, { custoMicro: "caro" });
+  banco.gravar(`${R}/receitas/p2`, { custoMicro: -5 });
+  const id = await novoPedido();
+  assert.equal(pedidoDoc(id).custoCompleto, false);
+  assert.equal(pedidoDoc(id).itens[0].custoUnitarioMicro, null);
+});

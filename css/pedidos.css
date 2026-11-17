@@ -1,7 +1,5 @@
 /* Deu Fome — carrinho, acompanhamento e painel de pedidos (Etapa 3) */
 .btn-pequeno { min-height: 34px; padding: 5px 12px; font-size: .86rem; white-space: nowrap; }
-.btn-perigo { background: transparent; color: var(--cor-erro); border: 2px solid var(--cor-erro); }
-.btn-perigo:hover { background: rgba(217, 48, 37, .08); }
 .body-com-barra { padding-bottom: 84px; }
 
 /* Barra do carrinho (aparece no cardápio) */

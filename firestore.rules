@@ -9,6 +9,8 @@ rules_version = '2';
 //   restaurantes/{id}/membros/{uid}        quem pode gerenciar (criado só pelo Mestre)
 //   restaurantes/{id}/categorias/{id}      categorias do cardápio (leitura pública só se ativas)
 //   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
+//   restaurantes/{id}/ingredientes/{id}    ingredientes e preço de compra (PRIVADO: só o restaurante)
+//   restaurantes/{id}/receitas/{produtoId} receita e custo do produto (PRIVADO: só o restaurante)
 //   restaurantes/{id}/pedidos/{id}         pedido COMPLETO (nome, telefone, endereço): só o restaurante lê;
 //                                          CRIADO SÓ PELO SERVIDOR (/api/criar-pedido)
 //   restaurantes/{id}/acompanhamento/{id}  versão PÚBLICA do pedido (sem dados pessoais): o cliente lê por "get"
@@ -84,6 +86,28 @@ service cloud.firestore {
         && data.atualizadoEm == request.time;
     }
 
+    // Ingrediente: custo em "micro" (1 real = 1.000.000). precoMicro é por 1 unidade escolhida; custoMicroPorBase por g, ml ou un.
+    function validIngredienteFields(data) {
+      return data.keys().hasOnly(['nome', 'unidade', 'precoMicro', 'base', 'custoMicroPorBase', 'ativo', 'criadoEm', 'atualizadoEm'])
+        && data.nome is string && data.nome.size() >= 1 && data.nome.size() <= 60
+        && data.unidade in ['g', 'kg', 'ml', 'l', 'un']
+        && data.base in ['g', 'ml', 'un']
+        && data.precoMicro is int && data.precoMicro >= 0 && data.precoMicro <= 100000000000
+        && data.custoMicroPorBase is int && data.custoMicroPorBase >= 0 && data.custoMicroPorBase <= 100000000000
+        && data.ativo is bool
+        && data.atualizadoEm == request.time;
+    }
+
+    // Receita do produto (o id do documento é o id do produto). custoMicro = custo de 1 unidade vendida.
+    function validReceitaFields(restauranteId, produtoId, data) {
+      return data.keys().hasOnly(['itens', 'custoExtraMicro', 'custoMicro', 'atualizadoEm'])
+        && data.itens is list && data.itens.size() <= 40
+        && data.custoExtraMicro is int && data.custoExtraMicro >= 0 && data.custoExtraMicro <= 10000000000
+        && data.custoMicro is int && data.custoMicro >= 0 && data.custoMicro <= 1000000000000
+        && exists(/databases/$(database)/documents/restaurantes/$(restauranteId)/produtos/$(produtoId))
+        && data.atualizadoEm == request.time;
+    }
+
     // ---------- Restaurantes ----------
     match /restaurantes/{restauranteId} {
       // Público lê só restaurante ativo; Mestre e membros leem sempre (o Mestre vê os desativados)
@@ -129,6 +153,26 @@ service cloud.firestore {
           && request.resource.data.criadoEm == resource.data.criadoEm;
         // Produto não é apagado pelo painel (fica "arquivado": ativo = false), para o histórico de pedidos
         allow delete: if isMaster();
+      }
+
+      match /ingredientes/{ingredienteId} {
+        // Custos são PRIVADOS: só o restaurante (e o Mestre) lê ou grava. O cliente nunca vê.
+        allow read: if canManageRestaurant(restauranteId);
+        allow create: if canManageRestaurant(restauranteId)
+          && validIngredienteFields(request.resource.data)
+          && request.resource.data.criadoEm == request.time;
+        allow update: if canManageRestaurant(restauranteId)
+          && validIngredienteFields(request.resource.data)
+          && request.resource.data.criadoEm == resource.data.criadoEm;
+        allow delete: if canManageRestaurant(restauranteId);
+      }
+
+      match /receitas/{produtoId} {
+        // Receita e custo por produto: privado. O servidor copia o custo para o pedido na hora da venda.
+        allow read: if canManageRestaurant(restauranteId);
+        allow create, update: if canManageRestaurant(restauranteId)
+          && validReceitaFields(restauranteId, produtoId, request.resource.data);
+        allow delete: if canManageRestaurant(restauranteId);
       }
 
       match /pedidos/{pedidoId} {

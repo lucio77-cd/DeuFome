@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#e8451e"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icone.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icones/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Deu Fome Painel"><title>Custos — Deu Fome</title>
+  <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/painel.css">
+</head>
+<body>
+<header class="topo">Deu Fome <span class="topo-secundario">/ Custos</span></header>
+<main class="container painel-container">
+  <a class="link-voltar" href="/painel">← Voltar ao painel</a>
+
+  <section id="semLogin" class="card mensagem aviso oculto">Entre primeiro no <a href="/painel">painel do restaurante</a> com a sua conta e depois volte para esta página.</section>
+
+  <div id="app" class="oculto">
+    <section class="painel-cabecalho"><div><p class="sobretitulo">GESTÃO DE CUSTO</p><h1>Custos e margem</h1><p class="texto-suave">Cadastre os ingredientes, monte a receita de cada produto e veja quanto sobra em cada venda. Só você vê estes valores.</p></div></section>
+    <section id="semVinculo" class="card mensagem aviso oculto">Esta conta não está vinculada a um restaurante. Peça ao Mestre para vincular.</section>
+    <section id="erroCarga" class="card mensagem erro oculto"></section>
+    <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Restaurante</label><select id="seletorRestaurante"></select></section>
+
+    <div id="conteudo" class="oculto">
+      <section class="card">
+        <h2>1. Ingredientes</h2>
+        <p class="texto-suave">Informe quanto custa <strong>1 unidade</strong> do jeito que você compra. Ex.: queijo a R$ 50,00 o <strong>kg</strong>; leite a R$ 5,80 o <strong>litro</strong>; ovo a R$ 0,80 a <strong>unidade</strong>.</p>
+        <form id="ingredienteForm">
+          <input id="ingredienteId" type="hidden">
+          <div class="campo"><label for="ingredienteNome">Nome do ingrediente</label><input id="ingredienteNome" maxlength="60" required placeholder="Ex.: Queijo mussarela"></div>
+          <div class="grade-dois">
+            <div class="campo"><label for="ingredienteUnidade">Compro por</label><select id="ingredienteUnidade"></select></div>
+            <div class="campo"><label for="ingredientePreco">Preço de 1 <span id="rotuloUnidade">kg</span> (R$)</label><input id="ingredientePreco" inputmode="decimal" required placeholder="0,00"></div>
+          </div>
+          <div class="botoes-form"><button class="btn" type="submit" id="salvarIngrediente">Salvar ingrediente</button><button class="btn btn-secundario oculto" type="button" id="cancelarIngrediente">Cancelar edição</button></div>
+        </form>
+        <div id="listaIngredientes"></div>
+      </section>
+
+      <section class="card">
+        <h2>2. Receita do produto</h2>
+        <div class="campo"><label for="receitaProduto">Produto</label><select id="receitaProduto"></select></div>
+        <div id="editorReceita" class="oculto">
+          <div id="linhasReceita"></div>
+          <button class="btn btn-secundario btn-pequeno" type="button" id="addLinha">+ Adicionar ingrediente</button>
+          <div class="campo" style="margin-top:14px"><label for="receitaExtra">Outros custos por unidade vendida (R$) — embalagem, gás, etc. (opcional)</label><input id="receitaExtra" inputmode="decimal" placeholder="0,00"></div>
+          <div id="resumoReceita" class="resumo-custo"></div>
+          <p id="avisoReceita" class="mensagem erro" aria-live="polite"></p>
+          <div class="botoes-form"><button class="btn" type="button" id="salvarReceita">Salvar receita</button><button class="btn btn-perigo oculto" type="button" id="excluirReceita">Remover receita</button></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. Margem dos produtos</h2>
+        <p class="texto-suave">Lucro = preço de venda − custo da receita. Produtos sem receita ainda não entram na margem do dashboard.</p>
+        <div id="listaMargens"></div>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/custos.js"></script>
+</body></html>

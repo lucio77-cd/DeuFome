@@ -134,11 +134,15 @@ async function criarPedido(db, corpo, ip) {
   const limiteTelRef = db.collection("_limites").doc("tel_" + hash(telefone));
   const limiteIpRef = db.collection("_limites").doc("ip_" + hash(ip));
   const produtoRefs = [...quantidades.keys()].map((id) => restRef.collection("produtos").doc(id));
+  // Receitas (privadas) guardam o custo de cada produto; o custo é COPIADO para o pedido na hora da venda
+  const receitaRefs = produtoRefs.map((ref) => restRef.collection("receitas").doc(ref.id));
 
   // ----- Tudo em uma transação: lê preços atuais, confere regras e grava o pedido -----
   return db.runTransaction(async (t) => {
-    const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, ...produtoSnaps] =
-      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs);
+    const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, ...outrosSnaps] =
+      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs, ...receitaRefs);
+    const produtoSnaps = outrosSnaps.slice(0, produtoRefs.length);
+    const receitaSnaps = outrosSnaps.slice(produtoRefs.length);
 
     // Mesmo código de pedido enviado de novo (rede ruim): devolve o pedido já criado, sem duplicar
     if (pedidoSnap.exists) {
@@ -182,8 +186,12 @@ async function criarPedido(db, corpo, ip) {
         naoDisponiveis.push(produtoId);
         return;
       }
+      // Custo unitário (micro) congelado agora: se o preço do ingrediente mudar depois, este pedido não muda
+      const receita = receitaSnaps[i].exists ? receitaSnaps[i].data() : null;
+      const custoUnitarioMicro = receita && Number.isInteger(receita.custoMicro) && receita.custoMicro >= 0
+        ? receita.custoMicro : null;
       linhas.push({
-        produtoId, nome: p.nome, precoCentavos: p.precoCentavos,
+        produtoId, nome: p.nome, precoCentavos: p.precoCentavos, custoUnitarioMicro,
         quantidade: quantidades.get(produtoId), categoriaId: p.categoriaId
       });
     });
@@ -211,8 +219,12 @@ async function criarPedido(db, corpo, ip) {
     // Preços SEMPRE vêm do Firestore
     const itens = validas.map((l) => ({
       produtoId: l.produtoId, nome: l.nome, precoCentavos: l.precoCentavos,
-      quantidade: l.quantidade, subtotalCentavos: l.precoCentavos * l.quantidade
+      quantidade: l.quantidade, subtotalCentavos: l.precoCentavos * l.quantidade,
+      custoUnitarioMicro: l.custoUnitarioMicro // null se o produto ainda não tem receita (só o restaurante vê)
     }));
+    const custoCompleto = itens.every((i) => i.custoUnitarioMicro !== null);
+    const custoTotalMicro = custoCompleto
+      ? itens.reduce((soma, i) => soma + i.custoUnitarioMicro * i.quantidade, 0) : null;
     const subtotal = itens.reduce((soma, i) => soma + i.subtotalCentavos, 0);
     const taxa = Number.isInteger(rest.taxaEntregaCentavos) ? rest.taxaEntregaCentavos : 0;
     const total = subtotal + taxa;
@@ -250,6 +262,8 @@ async function criarPedido(db, corpo, ip) {
       entrega: { endereco, referencia },
       observacao,
       pagamento: { forma, trocoParaCentavos: trocoPara },
+      custoCompleto,
+      custoTotalMicro,
       cancelamentoSolicitado: false,
       resumoContado: true,
       resumoDia,

@@ -33,3 +33,19 @@
   .acoes-item { width: 100%; }
   .acoes-item .btn { flex: 1; }
 }
+
+/* Custos e margem */
+.linha-receita { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.resumo-custo { margin: 14px 0 4px; padding-top: 6px; border-top: 1px solid var(--cor-borda); }
+.margem-valor { text-align: right; }
+.margem-valor small { display: block; margin-top: 0; }
+.margem-boa { color: var(--cor-sucesso); }
+.margem-media { color: #8a6100; }
+.margem-ruim { color: var(--cor-erro); }
+.resumo-custo .resumo-linha { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.resumo-custo .resumo-linha.total { font-weight: 800; border-top: 1px solid var(--cor-borda); margin-top: 6px; padding-top: 10px; }
+@media (max-width: 560px) {
+  .linha-receita { grid-template-columns: 1fr 1fr; }
+  .linha-receita select:first-child { grid-column: 1 / -1; }
+  .linha-receita .btn { grid-column: 1 / -1; }
+}

@@ -82,6 +82,8 @@ img { max-width: 100%; display: block; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-secundario { background: transparent; color: var(--cor-primaria); border: 2px solid var(--cor-primaria); }
 .btn-secundario:hover { background: rgba(232, 69, 30, 0.08); }
+.btn-perigo { background: transparent; color: var(--cor-erro); border: 2px solid var(--cor-erro); }
+.btn-perigo:hover { background: rgba(217, 48, 37, .08); }
 .btn-bloco { display: flex; width: 100%; }
 
 /* Formulários */
