@@ -85,6 +85,8 @@ Ainda não inclui: pagamento online e captcha contra pedidos falsos (veja `PLANO
 6. Para conferir uma regra isolada, use o **Rules Playground** no Console do Firebase.
 7. **Testes automáticos das regras** (precisam de Java e Node): `cd tests && npm install && npm test`. Eles sobem o emulador do Firestore e conferem pedido privado, acompanhamento público, custos e cupons privados, contador de usos protegido e aparelhos de push. Rode antes de publicar qualquer mudança em `firestore.rules`.
 8. **Testes das funções `/api`** (sem emulador, só Node 22): `npm install && npm test`. Usam um Firestore falso em memória e conferem criar pedido, preço adulterado, cupons (limite, devolução ao cancelar), resumo diário e custos. **Não** conferem as regras de segurança (isso é o item 7).
+   Também há `tests/simulado.test.mjs`: um dia inteiro de restaurante (pedidos, cupons, cancelamentos, tentativas de fraude) conferido contra o dashboard.
+9. **Testes automáticos no GitHub** (`.github/workflows/testes.yml`): a cada envio para o `main`, o GitHub roda os testes das funções **e** das regras (com emulador e Java). Veja o resultado na aba **Actions** do repositório; não precisa instalar nada.
 
 ## Fluxo de cadastro
 

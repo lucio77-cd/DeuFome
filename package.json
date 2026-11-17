@@ -11,6 +11,6 @@
     "node": "22.x"
   },
   "scripts": {
-    "test": "node --test tests/id-pedido.test.mjs tests/status-regras.test.mjs tests/custo-calculo.test.mjs tests/cupom.test.mjs tests/dashboard-calculo.test.mjs tests/api.test.mjs"
+    "test": "node --test tests/id-pedido.test.mjs tests/status-regras.test.mjs tests/custo-calculo.test.mjs tests/cupom.test.mjs tests/dashboard-calculo.test.mjs tests/api.test.mjs tests/simulado.test.mjs"
   }
 }
