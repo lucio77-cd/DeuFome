@@ -17,7 +17,26 @@
     <section class="painel-cabecalho"><div><p class="sobretitulo">PEDIDOS</p><h1>Pedidos recebidos</h1><p class="texto-suave">Os pedidos novos aparecem aqui sozinhos. Deixe esta página aberta.</p></div></section>
     <section id="semVinculo" class="card mensagem aviso oculto">Esta conta não está vinculada a um restaurante. Peça ao Mestre para vincular.</section>
     <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Restaurante</label><select id="seletorRestaurante"></select></section>
+
+    <section id="avisosArea" class="card oculto">
+      <h2>Avisos no celular</h2>
+      <p id="estadoAvisos" class="texto-suave"></p>
+      <button id="btnAvisos" class="btn btn-bloco oculto" type="button">🔔 Ativar avisos de novos pedidos</button>
+    </section>
+
     <div id="lista"></div>
+
+    <section id="historicoArea" class="oculto">
+      <h2>Histórico por dia</h2>
+      <div class="card">
+        <div class="form-linha">
+          <div class="campo"><label for="dataHistorico">Dia</label><input id="dataHistorico" type="date"></div>
+          <button id="btnHistorico" class="btn" type="button">Ver</button>
+        </div>
+        <p id="resumoHistorico" class="texto-suave" aria-live="polite"></p>
+      </div>
+      <div id="listaHistorico"></div>
+    </section>
   </div>
 </main>
 <script type="module" src="/js/pedidos-painel.js"></script>
