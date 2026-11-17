@@ -63,8 +63,13 @@ function desenhar(p) {
   const resumo = criar("section", { class: "card" },
     criar("h2", { texto: "Seu pedido" }),
     ...itens.map((i) => linha(`${i.quantidade}× ${i.nome}`, formatarMoeda(i.subtotalCentavos))),
-    linha("Subtotal", formatarMoeda(p.subtotalCentavos)),
-    linha("Entrega", p.taxaEntregaCentavos > 0 ? formatarMoeda(p.taxaEntregaCentavos) : "Grátis"),
+    linha("Subtotal", formatarMoeda(p.subtotalCentavos)));
+  // Cupom: pedidos antigos não têm esses campos, então só aparece quando existe
+  if (p.descontoCentavos > 0) {
+    resumo.append(linha(p.cupomCodigo ? `Desconto (${p.cupomCodigo})` : "Desconto", `− ${formatarMoeda(p.descontoCentavos)}`));
+  }
+  resumo.append(
+    linha("Entrega", p.taxaEntregaCentavos > 0 ? formatarMoeda(p.taxaEntregaCentavos) : (p.taxaOriginalCentavos > 0 && p.cupomCodigo ? `Grátis (${p.cupomCodigo})` : "Grátis")),
     linha("Total", formatarMoeda(p.totalCentavos), "total"));
 
   // Telefone, endereço e observação ficam só no pedido completo (privado). Aqui só o primeiro nome.

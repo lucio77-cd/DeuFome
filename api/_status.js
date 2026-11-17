@@ -25,4 +25,17 @@ function gravarResumo(t, restRef, pedido, evento, dataCriacao) {
   );
 }
 
-module.exports = { gravarResumo };
+// Pedido cancelado devolve o uso do cupom (o cliente não perde o cupom por culpa do cancelamento).
+// ATENÇÃO: faz uma LEITURA, então chame ANTES de qualquer t.update/t.set da transação (o Firestore exige
+// todas as leituras antes das gravações). Se o cupom foi apagado ou já está em zero, não faz nada.
+async function devolverUsoDoCupom(t, restRef, pedido) {
+  const codigo = pedido.cupom && pedido.cupom.codigo;
+  if (!codigo) return false;
+  const ref = restRef.collection("cupons").doc(String(codigo));
+  const snap = await t.get(ref);
+  if (!snap.exists || !(Number(snap.data().usos) > 0)) return false;
+  t.update(ref, { usos: FieldValue.increment(-1) });
+  return true;
+}
+
+module.exports = { gravarResumo, devolverUsoDoCupom };

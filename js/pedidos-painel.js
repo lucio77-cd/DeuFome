@@ -88,6 +88,8 @@ function cartao(p) {
     criar("ul", { class: "pedido-itens" },
       ...itens.map((i) => criar("li", { texto: `${i.quantidade}× ${i.nome} — ${formatarMoeda(i.subtotalCentavos)}` }))),
     p.observacao ? criar("p", { class: "mensagem aviso", texto: `Obs.: ${p.observacao}` }) : "",
+    p.cupom && p.cupom.codigo
+      ? criar("p", { class: "pedido-cupom", texto: `🎟️ Cupom ${p.cupom.codigo}${p.descontoCentavos > 0 ? `: − ${formatarMoeda(p.descontoCentavos)}` : ""}${p.taxaOriginalCentavos > 0 && p.taxaEntregaCentavos === 0 ? " · frete grátis" : ""}` }) : "",
     criar("p", { texto: `Entrega: ${formatarMoeda(p.taxaEntregaCentavos)} · Total: ${formatarMoeda(p.totalCentavos)}` }),
     criar("p", { texto: `💳 ${FORMAS[pagamento.forma] || "—"}${troco}` }),
     p.status === STATUS_PEDIDO.CANCELADO && p.motivoCancelamento

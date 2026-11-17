@@ -9,7 +9,7 @@
 const { FieldValue } = require("firebase-admin/firestore");
 const { ErroPedido, iniciarFirebase, usuarioDaRequisicao, exigirGestor, lerCorpo, texto } = require("./_comum");
 const { STATUS, transicaoValida } = require("./_status-regras");
-const { gravarResumo } = require("./_status");
+const { gravarResumo, devolverUsoDoCupom } = require("./_status");
 
 const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
@@ -38,6 +38,9 @@ async function atualizar(db, uid, corpo) {
     if (!transicaoValida(pedido.status, status)) {
       throw new ErroPedido(409, "Este pedido já mudou de situação. Atualize a tela.", { statusAtual: pedido.status });
     }
+
+    // Cancelar devolve o uso do cupom (leitura: tem que vir antes das gravações)
+    if (status === "cancelado") await devolverUsoDoCupom(t, restRef, pedido);
 
     const dados = { status, atualizadoEm: FieldValue.serverTimestamp() };
     if (status === "cancelado") {

@@ -18,6 +18,7 @@ const {
 } = require("./_comum");
 const { gravarResumo } = require("./_status");
 const { diaSP } = require("./_status-regras");
+const { normalizarCodigo, avaliarCupom } = require("./_cupom");
 
 const FUSO = "America/Sao_Paulo";
 const FORMAS_PAGAMENTO = ["dinheiro", "cartao", "pix"];
@@ -126,6 +127,13 @@ async function criarPedido(db, corpo, ip) {
   }
   const totalEsperado = Number.isInteger(corpo.totalEsperadoCentavos) ? corpo.totalEsperadoCentavos : null;
 
+  // Cupom (opcional): o servidor confere de novo e calcula o desconto; o navegador só informa o código
+  let codigoCupom = null;
+  if (corpo.cupom != null && String(corpo.cupom).trim() !== "") {
+    codigoCupom = normalizarCodigo(corpo.cupom);
+    if (!codigoCupom) throw new ErroPedido(409, "Cupom inválido.", { codigo: "cupom_invalido" });
+  }
+
   // ----- Referências -----
   const restRef = db.collection("restaurantes").doc(restauranteId);
   const pedidoRef = restRef.collection("pedidos").doc(pedidoId);
@@ -136,13 +144,16 @@ async function criarPedido(db, corpo, ip) {
   const produtoRefs = [...quantidades.keys()].map((id) => restRef.collection("produtos").doc(id));
   // Receitas (privadas) guardam o custo de cada produto; o custo é COPIADO para o pedido na hora da venda
   const receitaRefs = produtoRefs.map((ref) => restRef.collection("receitas").doc(ref.id));
+  const cupomRef = codigoCupom ? restRef.collection("cupons").doc(codigoCupom) : null;
 
   // ----- Tudo em uma transação: lê preços atuais, confere regras e grava o pedido -----
   return db.runTransaction(async (t) => {
     const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, ...outrosSnaps] =
-      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs, ...receitaRefs);
+      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs, ...receitaRefs,
+        ...(cupomRef ? [cupomRef] : []));
     const produtoSnaps = outrosSnaps.slice(0, produtoRefs.length);
-    const receitaSnaps = outrosSnaps.slice(produtoRefs.length);
+    const receitaSnaps = outrosSnaps.slice(produtoRefs.length, produtoRefs.length * 2);
+    const cupomSnap = cupomRef ? outrosSnaps[produtoRefs.length * 2] : null;
 
     // Mesmo código de pedido enviado de novo (rede ruim): devolve o pedido já criado, sem duplicar
     if (pedidoSnap.exists) {
@@ -226,8 +237,23 @@ async function criarPedido(db, corpo, ip) {
     const custoTotalMicro = custoCompleto
       ? itens.reduce((soma, i) => soma + i.custoUnitarioMicro * i.quantidade, 0) : null;
     const subtotal = itens.reduce((soma, i) => soma + i.subtotalCentavos, 0);
-    const taxa = Number.isInteger(rest.taxaEntregaCentavos) ? rest.taxaEntregaCentavos : 0;
-    const total = subtotal + taxa;
+    const taxaOriginal = Number.isInteger(rest.taxaEntregaCentavos) ? rest.taxaEntregaCentavos : 0;
+
+    // Cupom: validado AQUI, dentro da transação, com o contador de usos lido no mesmo instante.
+    // Dois pedidos simultâneos com o último uso: o Firestore repete o segundo, que então vê o limite
+    // atingido e é recusado. (O desconto só incide sobre os produtos; o frete grátis zera a taxa.)
+    let desconto = 0;
+    let taxa = taxaOriginal;
+    let cupomUsado = null;
+    if (cupomRef) {
+      const av = avaliarCupom(cupomSnap.exists ? cupomSnap.data() : null,
+        { subtotalCentavos: subtotal, taxaCentavos: taxaOriginal, agora });
+      if (!av.ok) throw new ErroPedido(409, av.motivo, { codigo: "cupom_invalido" });
+      desconto = av.descontoCentavos;
+      taxa = av.taxaFinalCentavos;
+      cupomUsado = { ...av.cupom, codigo: codigoCupom };
+    }
+    const total = subtotal - desconto + taxa;
     if (total > LIMITE_TOTAL_CENTAVOS) throw new ErroPedido(400, "Pedido acima do limite permitido.");
     if (totalEsperado !== null && totalEsperado !== total) {
       throw new ErroPedido(409, "Os preços mudaram. Confira o novo total antes de enviar.", {
@@ -243,6 +269,8 @@ async function criarPedido(db, corpo, ip) {
     t.set(contadorRef, { ultimo: numero });
     t.set(limiteTelRef, { janelaInicio: janelaTel.janelaInicio, contagem: janelaTel.contagem, atualizadoEm: FieldValue.serverTimestamp() });
     t.set(limiteIpRef, { janelaInicio: janelaIp.janelaInicio, contagem: janelaIp.contagem, atualizadoEm: FieldValue.serverTimestamp() });
+    // Soma o uso do cupom na MESMA transação (cancelar o pedido devolve o uso: veja _status.js)
+    if (cupomRef) t.update(cupomRef, { usos: FieldValue.increment(1) });
 
     // Pedido completo: só o restaurante lê.
     // resumoContado: este pedido entra no resumo diário (pedidos antigos, sem a marca, ficam de fora).
@@ -256,7 +284,10 @@ async function criarPedido(db, corpo, ip) {
       restauranteNome: rest.nome,
       itens,
       subtotalCentavos: subtotal,
-      taxaEntregaCentavos: taxa,
+      descontoCentavos: desconto,       // desconto sobre os produtos (percentual ou fixo)
+      taxaOriginalCentavos: taxaOriginal,
+      taxaEntregaCentavos: taxa,        // taxa cobrada (0 com frete grátis)
+      cupom: cupomUsado,                // { codigo, tipo, valor } ou null
       totalCentavos: total,
       cliente: { nome, telefone },
       entrega: { endereco, referencia },
@@ -280,6 +311,9 @@ async function criarPedido(db, corpo, ip) {
       primeiroNome: nome.split(" ")[0].slice(0, 30),
       itens: itens.map((i) => ({ nome: i.nome, quantidade: i.quantidade, subtotalCentavos: i.subtotalCentavos })),
       subtotalCentavos: subtotal,
+      descontoCentavos: desconto,
+      cupomCodigo: cupomUsado ? cupomUsado.codigo : null,
+      taxaOriginalCentavos: taxaOriginal,
       taxaEntregaCentavos: taxa,
       totalCentavos: total,
       pagamento: { forma, trocoParaCentavos: trocoPara },

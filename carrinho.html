@@ -24,7 +24,16 @@
       <h2 id="nomeRestaurante"></h2>
       <p id="avisoStatus" class="mensagem aviso oculto"></p>
       <div id="listaItens"></div>
+      <div class="cupom-bloco">
+        <label for="cupomCodigo">Tem cupom de desconto?</label>
+        <div class="cupom-linha">
+          <input id="cupomCodigo" maxlength="20" autocapitalize="characters" autocomplete="off" placeholder="Digite o código">
+          <button id="aplicarCupom" class="btn btn-secundario" type="button">Aplicar</button>
+        </div>
+        <p id="cupomMsg" class="mensagem" aria-live="polite"></p>
+      </div>
       <div class="resumo-linha"><span>Subtotal</span><span id="subtotal"></span></div>
+      <div class="resumo-linha oculto" id="linhaDesconto"><span id="rotuloDesconto">Desconto</span><span id="valorDesconto"></span></div>
       <div class="resumo-linha"><span>Entrega</span><span id="taxa"></span></div>
       <div class="resumo-linha total"><span>Total</span><span id="total"></span></div>
     </section>

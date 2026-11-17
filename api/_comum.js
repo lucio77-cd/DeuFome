@@ -3,7 +3,7 @@
 
 const crypto = require("crypto");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getAuth } = require("firebase-admin/auth");
 const { waitUntil } = require("@vercel/functions");
@@ -158,8 +158,29 @@ async function enviarAviso(db, restauranteId, titulo, mensagem, origem) {
   }
 }
 
+// Limite de tentativas por janela de tempo (ex.: 20 conferências de cupom a cada 10 min por IP).
+// Guarda o contador em _limites/{chave} (só o servidor lê e grava). Estourou -> erro 429.
+async function limitarPorJanela(db, chave, maximo, janelaMs, mensagem) {
+  const ref = db.collection("_limites").doc(chave);
+  await db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    const agora = Date.now();
+    let inicio = agora;
+    let contagem = 1;
+    if (snap.exists) {
+      const atual = snap.data();
+      if (agora - Number(atual.janelaInicio) < janelaMs) {
+        inicio = Number(atual.janelaInicio);
+        contagem = Number(atual.contagem) + 1;
+        if (contagem > maximo) throw new ErroPedido(429, mensagem);
+      }
+    }
+    t.set(ref, { janelaInicio: inicio, contagem, atualizadoEm: FieldValue.serverTimestamp() });
+  });
+}
+
 module.exports = {
-  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
+  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano, limitarPorJanela,
   MASTER_UID, usuarioDaRequisicao, exigirGestor,
   ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
 };

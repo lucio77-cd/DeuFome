@@ -117,3 +117,113 @@ test("dispositivos de push: o dono cadastra o próprio aparelho; ninguém lê", 
   await assertFails(getDoc(ref(como(DONO_A))));                         // só o servidor lê
   await assertSucceeds(deleteDoc(ref(como(DONO_A))));
 });
+
+// ---------- Cupons (Etapa 6) ----------
+const cupomRef = (db, r = REST_A, codigo = "PROMO10") => doc(db, "restaurantes", r, "cupons", codigo);
+const cupomDados = (extra = {}) => ({
+  codigo: "PROMO10", tipo: "percentual", valor: 10, minimoCentavos: 0, validadeAte: null, limiteUsos: null,
+  usos: 0, ativo: true, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), ...extra
+});
+
+test("cupons são privados: o cliente não lê nem lista; só o restaurante certo", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(cupomRef(ctx.firestore()), { codigo: "PROMO10", tipo: "percentual", valor: 10, usos: 0, ativo: true });
+  });
+  await assertFails(getDoc(cupomRef(anonimo())));
+  await assertFails(getDocs(collection(anonimo(), "restaurantes", REST_A, "cupons")));
+  await assertFails(getDoc(cupomRef(como(DONO_B)))); // dono de OUTRO restaurante
+  await assertSucceeds(getDoc(cupomRef(como(DONO_A))));
+  await assertSucceeds(getDocs(collection(como(DONO_A), "restaurantes", REST_A, "cupons")));
+});
+
+test("criar cupom: percentual, fixo e frete grátis válidos; sempre com 0 usos", async () => {
+  const db = como(DONO_A);
+  await assertSucceeds(setDoc(cupomRef(db), cupomDados()));
+  await assertSucceeds(setDoc(cupomRef(db, REST_A, "MENOS5"), cupomDados({ codigo: "MENOS5", tipo: "fixo", valor: 500, limiteUsos: 50 })));
+  await assertSucceeds(setDoc(cupomRef(db, REST_A, "FRETE"), cupomDados({ codigo: "FRETE", tipo: "frete_gratis", valor: 0, minimoCentavos: 3000 })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "TRAPACA"), cupomDados({ codigo: "TRAPACA", usos: -50 })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "JAUSADO"), cupomDados({ codigo: "JAUSADO", usos: 3 })));
+});
+
+test("cupom inválido é negado: valor fora da faixa, código em minúscula, campo extra, dono de outro restaurante", async () => {
+  const db = como(DONO_A);
+  await assertFails(setDoc(cupomRef(db, REST_A, "ZERO"), cupomDados({ codigo: "ZERO", valor: 0 })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "MUITO"), cupomDados({ codigo: "MUITO", valor: 101 })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "FRETEX"), cupomDados({ codigo: "FRETEX", tipo: "frete_gratis", valor: 5 })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "minuscula"), cupomDados({ codigo: "minuscula" })));
+  await assertFails(setDoc(cupomRef(db, REST_A, "AB"), cupomDados({ codigo: "AB" }))); // curto demais
+  await assertFails(setDoc(cupomRef(db, REST_A, "OUTRO"), cupomDados({ codigo: "DIFERENTE" }))); // código != id
+  await assertFails(setDoc(cupomRef(db, REST_A, "EXTRA"), cupomDados({ codigo: "EXTRA", desconto: 99 })));
+  await assertFails(setDoc(cupomRef(como(DONO_B)), cupomDados())); // restaurante errado
+  await assertFails(setDoc(cupomRef(anonimo()), cupomDados()));
+});
+
+test("editar cupom: o restaurante muda as regras mas NÃO consegue alterar os usos", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(cupomRef(ctx.firestore()), { codigo: "PROMO10", tipo: "percentual", valor: 10, minimoCentavos: 0, validadeAte: null, limiteUsos: 5, usos: 3, ativo: true, criadoEm: new Date(), atualizadoEm: new Date() });
+  });
+  const db = como(DONO_A);
+  await assertSucceeds(updateDoc(cupomRef(db), { valor: 15, ativo: false, limiteUsos: 10, atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(cupomRef(db), { usos: 0, atualizadoEm: serverTimestamp() }));  // zerar para burlar o limite
+  await assertFails(updateDoc(cupomRef(db), { usos: 99, atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(cupomRef(db), { criadoEm: new Date(), atualizadoEm: serverTimestamp() }));
+  await assertSucceeds(deleteDoc(cupomRef(db)));
+});
+
+// ---------- Custos (Etapa 5): ingredientes e receitas são PRIVADOS ----------
+const ingRef = (db, r = REST_A, id = "queijo") => doc(db, "restaurantes", r, "ingredientes", id);
+const recRef = (db, r = REST_A, id = "p1") => doc(db, "restaurantes", r, "receitas", id);
+const ingDados = (extra = {}) => ({
+  nome: "Queijo", unidade: "kg", precoMicro: 50000000, base: "g", custoMicroPorBase: 50000, ativo: true,
+  criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), ...extra
+});
+const recDados = (extra = {}) => ({
+  itens: [{ ingredienteId: "queijo", nome: "Queijo", quantidadeBase: 40, unidadeBase: "g" }],
+  custoExtraMicro: 0, custoMicro: 2000000, atualizadoEm: serverTimestamp(), ...extra
+});
+
+test("ingredientes e receitas: o cliente não lê, o dono de outro restaurante não lê nem grava", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "restaurantes", REST_A, "produtos", "p1"), { nome: "X", precoCentavos: 1000, ativo: true });
+    await setDoc(ingRef(db), { nome: "Queijo", unidade: "kg", base: "g", custoMicroPorBase: 50000 });
+    await setDoc(recRef(db), { itens: [], custoMicro: 0 });
+  });
+  await assertFails(getDoc(ingRef(anonimo())));
+  await assertFails(getDoc(recRef(anonimo())));
+  await assertFails(getDocs(collection(anonimo(), "restaurantes", REST_A, "ingredientes")));
+  await assertFails(getDoc(ingRef(como(DONO_B))));
+  await assertFails(getDoc(recRef(como(DONO_B))));
+  await assertFails(setDoc(ingRef(como(DONO_B)), ingDados()));
+  await assertSucceeds(getDoc(ingRef(como(DONO_A))));
+  await assertSucceeds(getDoc(recRef(como(DONO_A))));
+});
+
+test("ingrediente: unidades g, kg, ml, l e un; preço negativo ou unidade inventada é negado", async () => {
+  const db = como(DONO_A);
+  await assertSucceeds(setDoc(ingRef(db), ingDados()));
+  await assertSucceeds(setDoc(ingRef(db, REST_A, "leite"), ingDados({ nome: "Leite", unidade: "l", base: "ml", precoMicro: 5800000, custoMicroPorBase: 5800 })));
+  await assertSucceeds(setDoc(ingRef(db, REST_A, "ovo"), ingDados({ nome: "Ovo", unidade: "un", base: "un", precoMicro: 800000, custoMicroPorBase: 800000 })));
+  await assertFails(setDoc(ingRef(db, REST_A, "ruim1"), ingDados({ precoMicro: -1 })));
+  await assertFails(setDoc(ingRef(db, REST_A, "ruim2"), ingDados({ unidade: "colher" })));
+  await assertFails(setDoc(ingRef(db, REST_A, "ruim3"), ingDados({ nome: "" })));
+});
+
+test("ingrediente: editar com updateDoc preserva criadoEm; mandar criadoEm diferente é negado", async () => {
+  const db = como(DONO_A);
+  await assertSucceeds(setDoc(ingRef(db), ingDados()));
+  await assertSucceeds(updateDoc(ingRef(db), { precoMicro: 60000000, custoMicroPorBase: 60000, atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(ingRef(db), { criadoEm: new Date(0), atualizadoEm: serverTimestamp() }));
+});
+
+test("receita: só de produto que existe no restaurante, com custo válido", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "restaurantes", REST_A, "produtos", "p1"), { nome: "X", precoCentavos: 1000, ativo: true });
+  });
+  const db = como(DONO_A);
+  await assertSucceeds(setDoc(recRef(db), recDados()));
+  await assertFails(setDoc(recRef(db, REST_A, "produtoQueNaoExiste"), recDados()));
+  await assertFails(setDoc(recRef(db), recDados({ custoMicro: -5 })));
+  await assertFails(setDoc(recRef(db), recDados({ custoExtraMicro: -1 })));
+  await assertFails(setDoc(recRef(db), recDados({ itens: "não é lista" })));
+});

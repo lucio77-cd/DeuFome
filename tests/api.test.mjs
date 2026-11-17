@@ -7,10 +7,11 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { banco, chamar } = require("./_firebase-falso.cjs"); // ANTES de carregar as funções
+const { banco, chamar, Ts } = require("./_firebase-falso.cjs"); // ANTES de carregar as funções
 const criarPedido = require("../api/criar-pedido.js");
 const atualizarStatus = require("../api/atualizar-status.js");
 const cancelarPedido = require("../api/cancelar-pedido.js");
+const validarCupom = require("../api/validar-cupom.js");
 const { MASTER_UID } = require("../api/_comum.js");
 const { diaSP } = require("../api/_status-regras.js");
 
@@ -263,4 +264,185 @@ test("receita com custo inválido (texto, negativo, quebrado) é ignorada em vez
   const id = await novoPedido();
   assert.equal(pedidoDoc(id).custoCompleto, false);
   assert.equal(pedidoDoc(id).itens[0].custoUnitarioMicro, null);
+});
+
+// ---------- Cupons (Etapa 6) ----------
+const CUPOM = (extra = {}) => ({ codigo: "PROMO10", tipo: "percentual", valor: 10, minimoCentavos: 0, validadeAte: null, limiteUsos: null, usos: 0, ativo: true, ...extra });
+const semearCupom = (extra) => banco.gravar(`${R}/cupons/PROMO10`, CUPOM(extra));
+const usos = () => banco.ler(`${R}/cupons/PROMO10`).usos;
+const pedidosGravados = () => banco.caminhos().filter((c) => c.startsWith(`${R}/pedidos/`)).length;
+// Subtotal 3600 (2 x 1500 + 600) + entrega 500. Com 10%: 3600 - 360 + 500 = 3740.
+const comCupom = (n, extra = {}, total = 3740) => chamar(criarPedido, {
+  corpo: corpoPedido(chaveDe(n), { cupom: "promo10", totalEsperadoCentavos: total, ...extra }), ip: `10.0.1.${n}`
+});
+
+test("cupom percentual: servidor calcula o desconto, grava no pedido e soma 1 uso", async () => {
+  semearCupom();
+  const r = await comCupom(1);
+  assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.totalCentavos, 3740);
+  const p = pedidoDoc(r.corpo.pedidoId);
+  assert.equal(p.descontoCentavos, 360);
+  assert.equal(p.taxaEntregaCentavos, 500);
+  assert.deepEqual(p.cupom, { codigo: "PROMO10", tipo: "percentual", valor: 10 });
+  assert.equal(acompDoc(r.corpo.pedidoId).cupomCodigo, "PROMO10");
+  assert.equal(acompDoc(r.corpo.pedidoId).descontoCentavos, 360);
+  assert.equal(usos(), 1);
+});
+
+test("desconto adulterado no navegador é recusado: o total esperado precisa bater com o do servidor", async () => {
+  semearCupom();
+  const r = await comCupom(1, {}, 100); // cliente "calculou" um total qualquer
+  assert.equal(r.codigo, 409);
+  assert.equal(r.corpo.codigo, "preco_mudou");
+  assert.equal(r.corpo.totalCentavos, 3740);
+  assert.equal(usos(), 0);
+  assert.equal(pedidosGravados(), 0);
+});
+
+test("pedido sem cupom continua igual: sem desconto e sem tocar em cupom algum", async () => {
+  semearCupom();
+  const id = await novoPedido();
+  assert.equal(pedidoDoc(id).descontoCentavos, 0);
+  assert.equal(pedidoDoc(id).cupom, null);
+  assert.equal(usos(), 0);
+});
+
+test("limite de usos: depois do último uso o cupom é recusado e nenhum pedido novo é gravado", async () => {
+  semearCupom({ limiteUsos: 1 });
+  assert.equal((await comCupom(1)).codigo, 201);
+  const segundo = await comCupom(2);
+  assert.equal(segundo.codigo, 409);
+  assert.equal(segundo.corpo.codigo, "cupom_invalido");
+  assert.match(segundo.corpo.erro, /limite/);
+  assert.equal(usos(), 1);
+  assert.equal(pedidosGravados(), 1);
+});
+
+test("cancelar pelo restaurante devolve o uso do cupom, e o cupom volta a valer", async () => {
+  semearCupom({ limiteUsos: 1 });
+  const a = await comCupom(1);
+  assert.equal(usos(), 1);
+  assert.equal((await status("donoR1", a.corpo.pedidoId, "cancelado", "Sem ingrediente")).codigo, 200);
+  assert.equal(usos(), 0);
+  assert.equal((await comCupom(2)).codigo, 201); // o uso devolvido está livre de novo
+  assert.equal(usos(), 1);
+});
+
+test("cancelar pelo cliente devolve o uso do cupom", async () => {
+  semearCupom({ limiteUsos: 5 });
+  const a = await comCupom(1);
+  assert.equal(usos(), 1);
+  const c = await chamar(cancelarPedido, { corpo: { restauranteId: "r1", pedidoId: a.corpo.pedidoId } });
+  assert.equal(c.corpo.resultado, "cancelado");
+  assert.equal(usos(), 0);
+});
+
+test("cancelar duas vezes não devolve o uso duas vezes", async () => {
+  semearCupom({ limiteUsos: 5 });
+  const a = await comCupom(1);
+  await comCupom(2);
+  assert.equal(usos(), 2);
+  await status("donoR1", a.corpo.pedidoId, "cancelado");
+  const de_novo = await status("donoR1", a.corpo.pedidoId, "cancelado");
+  assert.equal(de_novo.corpo.jaEstava, true);
+  assert.equal(usos(), 1);
+});
+
+test("cupom vencido, abaixo do mínimo, inexistente e desativado são recusados", async () => {
+  semearCupom({ validadeAte: new Ts(Date.now() - 60000) });
+  let r = await comCupom(1);
+  assert.equal(r.codigo, 409);
+  assert.match(r.corpo.erro, /vencido/);
+
+  semearCupom({ minimoCentavos: 5000 });
+  r = await comCupom(2);
+  assert.equal(r.codigo, 409);
+  assert.match(r.corpo.erro, /a partir de R\$ 50,00/);
+
+  semearCupom({ ativo: false });
+  r = await comCupom(3);
+  assert.equal(r.corpo.erro, "Cupom inválido.");
+
+  banco.limpar(); semear();
+  r = await comCupom(4);
+  assert.equal(r.corpo.erro, "Cupom inválido.");
+  assert.equal(pedidosGravados(), 0);
+});
+
+test("cupom fixo maior que os produtos zera os produtos, mas a entrega continua cobrada", async () => {
+  semearCupom({ tipo: "fixo", valor: 9000 });
+  const r = await comCupom(1, {}, 500);
+  assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
+  assert.equal(pedidoDoc(r.corpo.pedidoId).descontoCentavos, 3600);
+});
+
+test("frete grátis: taxa cobrada vira 0, a original fica registrada e o resumo mostra o frete perdoado", async () => {
+  semearCupom({ tipo: "frete_gratis", valor: 0 });
+  const r = await comCupom(1, {}, 3600);
+  assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
+  const p = pedidoDoc(r.corpo.pedidoId);
+  assert.equal(p.taxaEntregaCentavos, 0);
+  assert.equal(p.taxaOriginalCentavos, 500);
+  await ate(r.corpo.pedidoId, "preparando", "saiu_para_entrega", "entregue");
+  assert.equal(resumo().descontoEntregaCentavos, 500);
+  assert.equal(resumo().faturamentoCentavos, 3600);
+});
+
+test("resumo diário registra desconto e uso do cupom só quando entrega; cancelado não conta como cupom usado", async () => {
+  semearCupom();
+  const entregue = await comCupom(1);
+  const cancelado = await comCupom(2);
+  await ate(entregue.corpo.pedidoId, "preparando", "saiu_para_entrega", "entregue");
+  await status("donoR1", cancelado.corpo.pedidoId, "cancelado");
+  const r = resumo();
+  assert.equal(r.entregues, 1);
+  assert.equal(r.cancelados, 1);
+  assert.equal(r.descontoCentavos, 360);
+  assert.equal(r.produtosCentavos, 3240); // 3600 - 360
+  assert.equal(r.faturamentoCentavos, 3740);
+  assert.deepEqual(r.cupons, { PROMO10: 1 });
+  assert.equal(usos(), 1); // o cancelado devolveu o uso
+});
+
+test("validar-cupom: devolve o desconto e o total calculados no servidor, sem gastar um uso", async () => {
+  semearCupom({ limiteUsos: 1 });
+  const itens = [{ produtoId: "p1", quantidade: 2 }, { produtoId: "p2", quantidade: 1 }];
+  const r = await chamar(validarCupom, { corpo: { restauranteId: "r1", codigo: "promo10", itens } });
+  assert.equal(r.codigo, 200, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.codigo, "PROMO10");
+  assert.equal(r.corpo.subtotalCentavos, 3600);
+  assert.equal(r.corpo.descontoCentavos, 360);
+  assert.equal(r.corpo.taxaCentavos, 500);
+  assert.equal(r.corpo.totalCentavos, 3740);
+  assert.equal(usos(), 0); // conferir não consome o cupom
+});
+
+test("validar-cupom: código inexistente, item indisponível e método errado", async () => {
+  semearCupom();
+  const itens = [{ produtoId: "p1", quantidade: 1 }];
+  let r = await chamar(validarCupom, { corpo: { restauranteId: "r1", codigo: "naoexiste", itens } });
+  assert.equal(r.codigo, 409);
+  assert.equal(r.corpo.codigo, "cupom_invalido");
+
+  banco.gravar(`${R}/produtos/p2`, { nome: "Suco", precoCentavos: 600, ativo: true, disponivel: false, categoriaId: "cat1" });
+  r = await chamar(validarCupom, { corpo: { restauranteId: "r1", codigo: "promo10", itens: [{ produtoId: "p2", quantidade: 1 }] } });
+  assert.equal(r.codigo, 409);
+  assert.equal(r.corpo.codigo, "produto_indisponivel");
+
+  r = await chamar(validarCupom, { metodo: "GET" });
+  assert.equal(r.codigo, 405);
+});
+
+test("validar-cupom: depois de 20 tentativas em 10 minutos o mesmo IP é bloqueado (impede adivinhar códigos)", async () => {
+  semearCupom();
+  const corpo = { restauranteId: "r1", codigo: "chute", itens: [{ produtoId: "p1", quantidade: 1 }] };
+  for (let i = 0; i < 20; i++) {
+    const r = await chamar(validarCupom, { corpo, ip: "9.9.9.9" });
+    assert.equal(r.codigo, 409, `tentativa ${i + 1}`);
+  }
+  const r = await chamar(validarCupom, { corpo, ip: "9.9.9.9" });
+  assert.equal(r.codigo, 429);
+  const outro = await chamar(validarCupom, { corpo, ip: "8.8.8.8" }); // outro IP não é afetado
+  assert.equal(outro.codigo, 409);
 });

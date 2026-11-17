@@ -11,6 +11,7 @@ rules_version = '2';
 //   restaurantes/{id}/produtos/{id}        produtos (preço em centavos; nunca apagados, só arquivados)
 //   restaurantes/{id}/ingredientes/{id}    ingredientes e preço de compra (PRIVADO: só o restaurante)
 //   restaurantes/{id}/receitas/{produtoId} receita e custo do produto (PRIVADO: só o restaurante)
+//   restaurantes/{id}/cupons/{CODIGO}      cupons de desconto (PRIVADO: o cliente confere pela API; "usos" só o servidor muda)
 //   restaurantes/{id}/pedidos/{id}         pedido COMPLETO (nome, telefone, endereço): só o restaurante lê;
 //                                          CRIADO SÓ PELO SERVIDOR (/api/criar-pedido)
 //   restaurantes/{id}/acompanhamento/{id}  versão PÚBLICA do pedido (sem dados pessoais): o cliente lê por "get"
@@ -108,6 +109,26 @@ service cloud.firestore {
         && data.atualizadoEm == request.time;
     }
 
+    // Cupom: o id do documento é o código (letras maiúsculas e números, 3 a 20).
+    // percentual: valor de 1 a 100 | fixo: valor em centavos | frete_gratis: valor 0.
+    // validadeAte e limiteUsos podem ser null (sem prazo / sem limite). "usos" é do servidor.
+    function validCupomFields(cupomId, data) {
+      return data.keys().hasOnly(['codigo', 'tipo', 'valor', 'minimoCentavos', 'validadeAte', 'limiteUsos', 'usos', 'ativo', 'criadoEm', 'atualizadoEm'])
+        && cupomId.matches('^[A-Z0-9]{3,20}$')
+        && data.codigo == cupomId
+        && data.tipo in ['percentual', 'fixo', 'frete_gratis']
+        && data.valor is int
+        && ((data.tipo == 'percentual' && data.valor >= 1 && data.valor <= 100)
+          || (data.tipo == 'fixo' && data.valor >= 1 && data.valor <= 1000000)
+          || (data.tipo == 'frete_gratis' && data.valor == 0))
+        && data.minimoCentavos is int && data.minimoCentavos >= 0 && data.minimoCentavos <= 1000000
+        && (data.validadeAte == null || data.validadeAte is timestamp)
+        && (data.limiteUsos == null || (data.limiteUsos is int && data.limiteUsos >= 1 && data.limiteUsos <= 100000))
+        && data.usos is int && data.usos >= 0
+        && data.ativo is bool
+        && data.atualizadoEm == request.time;
+    }
+
     // ---------- Restaurantes ----------
     match /restaurantes/{restauranteId} {
       // Público lê só restaurante ativo; Mestre e membros leem sempre (o Mestre vê os desativados)
@@ -172,6 +193,23 @@ service cloud.firestore {
         allow read: if canManageRestaurant(restauranteId);
         allow create, update: if canManageRestaurant(restauranteId)
           && validReceitaFields(restauranteId, produtoId, request.resource.data);
+        allow delete: if canManageRestaurant(restauranteId);
+      }
+
+      match /cupons/{cupomId} {
+        // Cupons são PRIVADOS: o cliente nunca lista nem lê (assim ninguém descobre os códigos).
+        // Ele confere o código por /api/validar-cupom e o pedido valida de novo no servidor.
+        allow read: if canManageRestaurant(restauranteId);
+        // Novo cupom sempre começa com 0 usos
+        allow create: if canManageRestaurant(restauranteId)
+          && validCupomFields(cupomId, request.resource.data)
+          && request.resource.data.usos == 0
+          && request.resource.data.criadoEm == request.time;
+        // O restaurante edita regras do cupom, mas NÃO mexe nos usos (só o servidor soma e devolve)
+        allow update: if canManageRestaurant(restauranteId)
+          && validCupomFields(cupomId, request.resource.data)
+          && request.resource.data.usos == resource.data.usos
+          && request.resource.data.criadoEm == resource.data.criadoEm;
         allow delete: if canManageRestaurant(restauranteId);
       }
 

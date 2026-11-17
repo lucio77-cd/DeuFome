@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#e8451e"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icone.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icones/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Deu Fome Painel"><title>Cupons — Deu Fome</title>
+  <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/painel.css">
+</head>
+<body>
+<header class="topo">Deu Fome <span class="topo-secundario">/ Cupons</span></header>
+<main class="container painel-container">
+  <a class="link-voltar" href="/painel">← Voltar ao painel</a>
+
+  <section id="semLogin" class="card mensagem aviso oculto">Entre primeiro no <a href="/painel">painel do restaurante</a> com a sua conta e depois volte para esta página.</section>
+
+  <div id="app" class="oculto">
+    <section class="painel-cabecalho"><div><p class="sobretitulo">CUPONS</p><h1>Cupons de desconto</h1><p class="texto-suave">Crie códigos para o cliente digitar no carrinho. O desconto é calculado e conferido no servidor: não dá para burlar pelo celular.</p></div></section>
+    <section id="semVinculo" class="card mensagem aviso oculto">Esta conta não está vinculada a um restaurante. Peça ao Mestre para vincular.</section>
+    <section id="erroCarga" class="card mensagem erro oculto"></section>
+    <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Restaurante</label><select id="seletorRestaurante"></select></section>
+
+    <div id="conteudo" class="oculto">
+      <section class="card">
+        <h2 id="tituloForm">Novo cupom</h2>
+        <form id="cupomForm">
+          <input id="cupomEditando" type="hidden">
+          <div class="campo"><label for="cupomCodigo">Código (o que o cliente digita)</label><input id="cupomCodigo" maxlength="20" autocapitalize="characters" autocomplete="off" required placeholder="Ex.: BEMVINDO10"><small class="texto-suave">De 3 a 20 letras ou números, sem espaço.</small></div>
+          <div class="grade-dois">
+            <div class="campo"><label for="cupomTipo">Tipo de desconto</label>
+              <select id="cupomTipo">
+                <option value="percentual">Porcentagem (%) nos produtos</option>
+                <option value="fixo">Valor fixo (R$) nos produtos</option>
+                <option value="frete_gratis">Frete grátis</option>
+              </select></div>
+            <div class="campo" id="blocoValor"><label for="cupomValor" id="rotuloValor">Desconto (%)</label><input id="cupomValor" inputmode="decimal" placeholder="Ex.: 10"></div>
+          </div>
+          <div class="grade-dois">
+            <div class="campo"><label for="cupomMinimo">Pedido mínimo em produtos (R$) — opcional</label><input id="cupomMinimo" inputmode="decimal" placeholder="0,00"></div>
+            <div class="campo"><label for="cupomLimite">Limite de usos — opcional</label><input id="cupomLimite" inputmode="numeric" placeholder="Sem limite"></div>
+          </div>
+          <div class="campo"><label for="cupomValidade">Vale até (opcional)</label><input id="cupomValidade" type="date"><small class="texto-suave">Vale até o fim desse dia. Em branco: sem prazo.</small></div>
+          <label class="check-linha"><input id="cupomAtivo" type="checkbox" checked> Cupom ativo (desmarque para pausar)</label>
+          <div class="botoes-form"><button class="btn" type="submit" id="salvarCupom">Criar cupom</button><button class="btn btn-secundario oculto" type="button" id="cancelarEdicao">Cancelar edição</button></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Seus cupons</h2>
+        <p class="texto-suave">O desconto de porcentagem e de valor fixo vale só sobre os produtos, nunca sobre a taxa de entrega. Pedido cancelado devolve o uso do cupom.</p>
+        <div id="listaCupons"></div>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/cupons.js"></script>
+</body></html>

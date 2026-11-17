@@ -77,6 +77,14 @@ function deltaResumo(pedido, evento) {
     pagamentos: { [(pedido.pagamento && pedido.pagamento.forma) || "outro"]: 1 },
     produtos: {}
   };
+  // Frete grátis: quanto de taxa o restaurante deixou de cobrar (taxaOriginal só existe em pedidos novos)
+  if (Number.isFinite(pedido.taxaOriginalCentavos)) {
+    delta.descontoEntregaCentavos = Math.max(0, inteiro(pedido.taxaOriginalCentavos) - inteiro(pedido.taxaEntregaCentavos));
+  }
+  // Quantas entregas usaram cada cupom (o código só tem letras e números, serve de chave do mapa)
+  if (pedido.cupom && typeof pedido.cupom.codigo === "string" && /^[A-Z0-9]{3,20}$/.test(pedido.cupom.codigo)) {
+    delta.cupons = { [pedido.cupom.codigo]: 1 };
+  }
   for (const i of Array.isArray(pedido.itens) ? pedido.itens : []) {
     if (!i || typeof i.produtoId !== "string") continue;
     const atual = delta.produtos[i.produtoId] || { nome: String(i.nome || ""), quantidade: 0, receitaCentavos: 0 };

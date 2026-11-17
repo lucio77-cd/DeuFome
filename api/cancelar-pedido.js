@@ -6,7 +6,7 @@
 
 const { FieldValue } = require("firebase-admin/firestore");
 const { ErroPedido, iniciarFirebase, lerCorpo, origemDe, enviarAviso, emSegundoPlano } = require("./_comum");
-const { gravarResumo } = require("./_status");
+const { gravarResumo, devolverUsoDoCupom } = require("./_status");
 
 const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
@@ -40,6 +40,9 @@ async function cancelar(db, corpo) {
     } else {
       throw new ErroPedido(409, "Este pedido não pode mais ser cancelado por aqui. Fale com o restaurante.");
     }
+
+    // Cancelar devolve o uso do cupom (leitura: tem que vir antes das gravações)
+    if (dados.status === "cancelado") await devolverUsoDoCupom(t, restRef, pedido);
 
     t.update(pedidoRef, dados);
     if (acompSnap.exists) t.update(acompRef, dados); // pedidos antigos podem não ter o acompanhamento

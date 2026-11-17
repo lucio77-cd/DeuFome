@@ -57,3 +57,13 @@
   body.imprimindo .pedido-cartao.imprimir a { color: #000; text-decoration: none; }
   @page { margin: 6mm; }
 }
+
+/* Cupom no carrinho */
+.cupom-bloco { margin: 14px 0 6px; }
+.cupom-linha { display: flex; gap: 8px; }
+.cupom-linha input { flex: 1; text-transform: uppercase; }
+.cupom-linha .btn { flex: 0 0 auto; }
+.cupom-bloco .mensagem { margin: 6px 0 0; min-height: 0; }
+.cupom-bloco .mensagem.sucesso { color: var(--cor-sucesso); }
+.pedido-cupom { color: var(--cor-sucesso); font-weight: 600; }
+@media print { .pedido-cupom { color: #000; } }

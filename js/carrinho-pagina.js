@@ -13,6 +13,10 @@ const avisos = $("#avisos");
 let restaurante = null;      // dados do restaurante (com id) para taxa e horário
 let totalAtual = 0;          // total mostrado na tela (confirmado pelo servidor ao enviar)
 let pedidoIdPendente = null; // mesmo código em reenvios após falha de rede (evita pedido duplicado)
+// Cupom aplicado: { codigo, subtotalCentavos (do carrinho quando foi conferido), descontoCentavos, taxaCentavos }.
+// O desconto vem do SERVIDOR (/api/validar-cupom) e é conferido de novo ao enviar o pedido.
+let cupom = null;
+let versaoCupom = 0;         // descarta respostas antigas da conferência de cupom
 
 function mostrarAviso(texto, tipo = "aviso") {
   avisos.replaceChildren(criar("p", { class: `mensagem ${tipo}`, texto }));
@@ -48,11 +52,25 @@ function desenhar() {
   )));
 
   const subtotal = subtotalCentavos(carrinho);
-  const taxa = Number(restaurante.taxaEntregaCentavos || 0);
-  totalAtual = subtotal + taxa;
+  const taxaBase = Number(restaurante.taxaEntregaCentavos || 0);
+  // O desconto de porcentagem depende do subtotal: se o carrinho mudou, tira o desconto e confere de novo
+  if (cupom && cupom.subtotalCentavos !== subtotal) {
+    const codigo = cupom.codigo;
+    cupom = null;
+    conferirCupom(codigo);
+  }
+  const desconto = cupom ? cupom.descontoCentavos : 0;
+  const taxa = cupom ? cupom.taxaCentavos : taxaBase;
+  totalAtual = subtotal - desconto + taxa;
   $("#subtotal").textContent = formatarMoeda(subtotal);
-  $("#taxa").textContent = taxa > 0 ? formatarMoeda(taxa) : "Grátis";
+  $("#linhaDesconto").classList.toggle("oculto", !(cupom && desconto > 0));
+  if (cupom && desconto > 0) {
+    $("#rotuloDesconto").textContent = `Desconto (${cupom.codigo})`;
+    $("#valorDesconto").textContent = `− ${formatarMoeda(desconto)}`;
+  }
+  $("#taxa").textContent = taxa > 0 ? formatarMoeda(taxa) : (cupom && taxaBase > 0 ? `Grátis (${cupom.codigo})` : "Grátis");
   $("#total").textContent = formatarMoeda(totalAtual);
+  $("#aplicarCupom").textContent = cupom ? "Remover" : "Aplicar";
 
   const status = statusRestaurante(restaurante);
   const avisoStatus = $("#avisoStatus");
@@ -116,6 +134,76 @@ async function atualizarDoServidor() {
     mostrarAviso(mensagemErroFirebase(erro), "erro");
   }
 }
+
+// ---------- Cupom ----------
+function mensagemCupom(texto, tipo = "") {
+  const el = $("#cupomMsg");
+  el.textContent = texto;
+  el.className = `mensagem ${tipo}`.trim();
+}
+
+// Pergunta ao servidor se o cupom vale para este carrinho e quanto desconta
+async function conferirCupom(codigoDigitado) {
+  const carrinho = lerCarrinho();
+  if (!restaurante || !carrinho.itens.length) return;
+  const subtotalNoEnvio = subtotalCentavos(carrinho);
+  const minhaVersao = ++versaoCupom;
+  mensagemCupom("Conferindo o cupom...");
+  let resposta;
+  try {
+    resposta = await fetch("/api/validar-cupom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        restauranteId: carrinho.restauranteId,
+        codigo: codigoDigitado,
+        itens: carrinho.itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade }))
+      })
+    });
+  } catch (erro) {
+    if (minhaVersao === versaoCupom) mensagemCupom("Sem conexão. Verifique a internet e tente de novo.", "erro");
+    return;
+  }
+  let dados = {};
+  try { dados = await resposta.json(); } catch (erro) { /* resposta sem JSON */ }
+  if (minhaVersao !== versaoCupom) return; // chegou depois de o carrinho ou o cupom mudarem
+
+  if (!resposta.ok) {
+    const tinha = cupom !== null;
+    cupom = null;
+    pedidoIdPendente = null;
+    desenhar();
+    mensagemCupom(`${tinha ? "Cupom removido: " : ""}${dados.erro || "Não foi possível conferir o cupom."}`, "erro");
+    if (dados.codigo === "produto_indisponivel") atualizarDoServidor();
+    return;
+  }
+  cupom = {
+    codigo: dados.codigo, subtotalCentavos: subtotalNoEnvio,
+    descontoCentavos: Number(dados.descontoCentavos) || 0, taxaCentavos: Number(dados.taxaCentavos) || 0
+  };
+  pedidoIdPendente = null; // total mudou: é um pedido novo
+  $("#cupomCodigo").value = dados.codigo;
+  desenhar();
+  mensagemCupom(`Cupom ${dados.codigo} aplicado.`, "sucesso");
+}
+
+$("#cupomCodigo").addEventListener("input", (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); });
+$("#cupomCodigo").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#aplicarCupom").click(); }
+});
+$("#aplicarCupom").addEventListener("click", () => {
+  if (cupom) {
+    cupom = null;
+    versaoCupom++;
+    pedidoIdPendente = null;
+    $("#cupomCodigo").value = "";
+    mensagemCupom("");
+    return desenhar();
+  }
+  const codigo = $("#cupomCodigo").value.trim();
+  if (codigo.length < 3) return mensagemCupom("Digite o código do cupom.", "erro");
+  executar($("#aplicarCupom"), () => conferirCupom(codigo));
+});
 
 // Botões + / − / lixeira
 $("#listaItens").addEventListener("click", (evento) => {
@@ -183,6 +271,7 @@ async function enviar() {
         entrega: { endereco, referencia },
         observacao,
         pagamento: { forma, trocoParaCentavos },
+        cupom: cupom ? cupom.codigo : undefined, // o servidor confere o cupom e calcula o desconto de novo
         totalEsperadoCentavos: totalAtual
       })
     });
@@ -201,6 +290,13 @@ async function enviar() {
       substituirItens(lerCarrinho().itens.filter((i) => !dados.produtoIds.includes(i.produtoId)));
       await atualizarDoServidor();
       return mostrarAviso(dados.erro || "Alguns itens não estão mais disponíveis e saíram do carrinho.", "erro");
+    }
+    if (dados.codigo === "cupom_invalido") {
+      cupom = null;
+      versaoCupom++;
+      desenhar();
+      mensagemCupom("");
+      return mostrarAviso(`${dados.erro || "O cupom não vale mais."} O cupom foi removido: confira o novo total.`, "erro");
     }
     if (dados.codigo === "preco_mudou" || dados.codigo === "fechado") {
       await atualizarDoServidor();
