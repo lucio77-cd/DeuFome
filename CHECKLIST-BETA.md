@@ -64,5 +64,5 @@ Anote todo dia (um caderno ou o WhatsApp do dono serve):
 ## 7. No fim da semana
 
 - [ ] Conversar 15 minutos com o dono: o que ajudou, o que atrapalhou.
-- [ ] Decidir a ordem de **custo, cupons e dashboard** pelo que ele pediu.
+- [x] Custo, cupons e dashboard já estão prontos (`/painel/custos`, `/painel/cupons`, `/painel/dashboard`). Peça ao dono: cadastrar ingredientes e receitas, criar 1 cupom de porcentagem (ex.: BEMVINDO10) e testar com 2 celulares o uso do **último** cupom do limite.
 - [ ] Revisar o `PLANO-PAGO.md` antes de abrir para o restaurante 2.
