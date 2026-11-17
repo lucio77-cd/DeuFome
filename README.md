@@ -52,6 +52,12 @@ Ainda não inclui: pagamento online e captcha contra pedidos falsos (veja `PLANO
 - O servidor **copia o custo da receita para o pedido** na hora da venda. Subir o preço do queijo depois não muda o lucro dos pedidos antigos.
 - Custo é guardado em "micro" (1 real = 1.000.000) porque 1 grama de ingrediente custa frações de centavo.
 
+## Etapa 7 — Resultados (`/painel/dashboard`)
+
+- Período (hoje, 7, 30, 90 dias): faturamento, ticket médio, lucro e margem, pedidos e cancelados, descontos dados, faturamento por dia, mais vendidos, horários de pico, formas de pagamento e cupons usados.
+- Lê **só os resumos diários** (poucos documentos), então continua barato mesmo com milhares de pedidos.
+- Conta pedidos **entregues**. A margem só considera entregas com custo cadastrado (o painel mostra a cobertura); pedidos antigos à Etapa 4 não têm resumo.
+
 ## Etapa 6 — Cupons (`/painel/cupons`)
 
 - Tipos: **porcentagem** (padrão), valor fixo e frete grátis. Opções: pedido mínimo, validade, limite de usos, pausar.
@@ -137,7 +143,7 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - `tests/` — Testes: das regras no emulador (`regras.test.mjs`, `package.json` próprio) e das funções `/api` e cálculos, sem emulador (`npm test` na raiz).
 - `api/atualizar-status.js` (status pelo restaurante), `api/cancelar-pedido.js` (cancelamento pelo cliente, ainda sem tela), `api/validar-cupom.js`.
 - `api/_comum.js`, `api/_id-pedido.js`, `api/_status.js`, `api/_status-regras.js`, `api/_cupom.js` — utilidades, código público do pedido, resumo diário e regras de cupom (o `_` impede a Vercel de expor como endereço).
-- `painel/custos.html`, `painel/cupons.html` — custos e cupons. `js/custos.js`, `js/custo-calculo.js`, `js/cupons.js`.
+- `painel/custos.html`, `painel/cupons.html`, `painel/dashboard.html` — custos, cupons e resultados. `js/custos.js`, `js/custo-calculo.js`, `js/cupons.js`, `js/dashboard.js`, `js/dashboard-calculo.js`.
 - `CHECKLIST-BETA.md`, `PLANO-PAGO.md` — roteiro do beta e o que muda ao ativar o plano pago.
 - `vercel.json` — Cabeçalhos de segurança (CSP sem script inline), URLs limpas e região das funções (`gru1`, São Paulo).
 

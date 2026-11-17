@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#e8451e"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icone.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icones/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Deu Fome Painel"><title>Resultados — Deu Fome</title>
+  <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/painel.css"><link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+<header class="topo">Deu Fome <span class="topo-secundario">/ Resultados</span></header>
+<main class="container painel-container">
+  <a class="link-voltar" href="/painel">← Voltar ao painel</a>
+
+  <section id="semLogin" class="card mensagem aviso oculto">Entre primeiro no <a href="/painel">painel do restaurante</a> com a sua conta e depois volte para esta página.</section>
+
+  <div id="app" class="oculto">
+    <section class="painel-cabecalho"><div><p class="sobretitulo">DASHBOARD</p><h1>Resultados</h1><p class="texto-suave">Números dos pedidos <strong>entregues</strong>. Pedido ainda em andamento só entra quando for entregue.</p></div></section>
+    <section id="semVinculo" class="card mensagem aviso oculto">Esta conta não está vinculada a um restaurante. Peça ao Mestre para vincular.</section>
+    <section id="erroCarga" class="card mensagem erro oculto"></section>
+    <section id="seletorArea" class="card oculto"><label for="seletorRestaurante">Restaurante</label><select id="seletorRestaurante"></select></section>
+
+    <div id="conteudo" class="oculto">
+      <section class="card">
+        <div class="campo"><label for="periodo">Período</label>
+          <select id="periodo"><option value="1">Hoje</option><option value="7" selected>Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></div>
+        <p id="vazio" class="texto-suave oculto">Ainda não há pedidos neste período.</p>
+      </section>
+      <div id="resultado">
+        <section class="grade-kpi" id="kpis"></section>
+        <section class="card"><h2>Faturamento por dia</h2><div id="graficoDias" class="barras"></div></section>
+        <section class="card"><h2>Mais vendidos</h2><div id="listaVendidos"></div></section>
+        <section class="card"><h2>Horários de pico</h2><p class="texto-suave">Pedidos feitos em cada hora (horário de Brasília).</p><div id="graficoHoras" class="barras"></div></section>
+        <section class="card"><h2>Pagamentos e cupons</h2><div id="listaPagamentos"></div><div id="listaCupons"></div></section>
+      </div>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/dashboard.js"></script>
+</body></html>
