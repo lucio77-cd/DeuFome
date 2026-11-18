@@ -13,6 +13,7 @@ const avisos = $("#avisos");
 let restaurante = null;      // dados do restaurante (com id) para taxa e horário
 let totalAtual = 0;          // total mostrado na tela (confirmado pelo servidor ao enviar)
 let pedidoIdPendente = null; // mesmo código em reenvios após falha de rede (evita pedido duplicado)
+let impressaoPendente = ""; // "foto" dos dados enviados com esse código: se mudarem, o reenvio é um pedido novo
 // Cupom aplicado: { codigo, subtotalCentavos (do carrinho quando foi conferido), descontoCentavos, taxaCentavos }.
 // O desconto vem do SERVIDOR (/api/validar-cupom) e é conferido de novo ao enviar o pedido.
 let cupom = null;
@@ -114,7 +115,7 @@ async function atualizarDoServidor() {
     let precoMudou = false;
     for (const item of carrinho.itens) {
       const p = atuais.get(item.produtoId);
-      if (!p || p.disponivel === false) {
+      if (!p || p.disponivel !== true) { // igual ao servidor: só "disponivel: true" vale
         removidos.push(item.nome);
         continue;
       }
@@ -256,7 +257,17 @@ async function enviar() {
     if (trocoParaCentavos < totalAtual) return erroNoFormulario(`O troco precisa ser para ${formatarMoeda(totalAtual)} ou mais.`);
   }
 
-  if (!pedidoIdPendente) pedidoIdPendente = novoPedidoId();
+  // Reenvio após falha de rede reaproveita o código (não duplica). Mas se o cliente CORRIGIU algum dado
+  // (endereço, pagamento, troco, cupom...), o servidor devolveria o pedido antigo com os dados velhos:
+  // por isso, dado diferente = código novo.
+  const impressao = JSON.stringify([
+    carrinho.restauranteId, carrinho.itens.map((i) => [i.produtoId, i.quantidade]),
+    nome, telefone, endereco, referencia, observacao, forma, trocoParaCentavos, cupom ? cupom.codigo : "", totalAtual
+  ]);
+  if (!pedidoIdPendente || impressao !== impressaoPendente) {
+    pedidoIdPendente = novoPedidoId();
+    impressaoPendente = impressao;
+  }
 
   let resposta;
   try {

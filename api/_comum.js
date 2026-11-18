@@ -136,7 +136,9 @@ const TOKENS_INVALIDOS = ["messaging/registration-token-not-registered", "messag
 // NUNCA lança erro: se o aviso falhar, o pedido já foi gravado e segue normalmente.
 async function enviarAviso(db, restauranteId, titulo, mensagem, origem) {
   const tarefa = (async () => {
-    const snap = await db.collection("restaurantes").doc(restauranteId).collection("dispositivos").limit(20).get();
+    // Os 20 aparelhos mais recentes: tokens velhos e esquecidos não ocupam o lugar dos ativos
+    const snap = await db.collection("restaurantes").doc(restauranteId).collection("dispositivos")
+      .orderBy("atualizadoEm", "desc").limit(20).get();
     const docs = snap.docs.filter((d) => typeof d.data().token === "string" && d.data().token);
     if (!docs.length) return;
     const webpush = {

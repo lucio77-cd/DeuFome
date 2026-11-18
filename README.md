@@ -143,7 +143,7 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - `package.json` — dependência `firebase-admin` da função.
 - `firestore.rules` — Regras de segurança. `firebase.json` e `firestore.indexes.json` — deploy das regras e emulador.
 - `tests/` — Testes: das regras no emulador (`regras.test.mjs`, `package.json` próprio) e das funções `/api` e cálculos, sem emulador (`npm test` na raiz).
-- `api/atualizar-status.js` (status pelo restaurante), `api/cancelar-pedido.js` (cancelamento pelo cliente, ainda sem tela), `api/validar-cupom.js`.
+- `api/atualizar-status.js` (status pelo restaurante), `api/cancelar-pedido.js` (cancelamento pelo cliente, botão em `/pedido`), `api/validar-cupom.js`.
 - `api/_comum.js`, `api/_id-pedido.js`, `api/_status.js`, `api/_status-regras.js`, `api/_cupom.js` — utilidades, código público do pedido, resumo diário e regras de cupom (o `_` impede a Vercel de expor como endereço).
 - `painel/custos.html`, `painel/cupons.html`, `painel/dashboard.html` — custos, cupons e resultados. `js/custos.js`, `js/custo-calculo.js`, `js/cupons.js`, `js/dashboard.js`, `js/dashboard-calculo.js`.
 - `CHECKLIST-BETA.md`, `PLANO-PAGO.md` — roteiro do beta e o que muda ao ativar o plano pago.

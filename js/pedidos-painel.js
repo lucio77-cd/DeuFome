@@ -45,11 +45,15 @@ function pararEscuta() {
   avisosAtivos = false;
 }
 
+// Um único AudioContext reaproveitado: criar um novo a cada pedido vaza recurso (o navegador limita a quantidade)
+let audio = null;
+
 function apitar() {
   try {
     const Contexto = window.AudioContext || window.webkitAudioContext;
     if (!Contexto) return;
-    const audio = new Contexto();
+    if (!audio) audio = new Contexto();
+    if (audio.state === "suspended") audio.resume();
     const oscilador = audio.createOscillator();
     const volume = audio.createGain();
     oscilador.connect(volume);
