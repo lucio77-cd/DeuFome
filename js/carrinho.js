@@ -105,11 +105,14 @@ export function lerCliente() {
     if (bruto && typeof bruto === "object") {
       return {
         nome: String(bruto.nome || ""), telefone: String(bruto.telefone || ""),
-        endereco: String(bruto.endereco || ""), referencia: String(bruto.referencia || "")
+        endereco: String(bruto.endereco || ""), referencia: String(bruto.referencia || ""),
+        // Campos opcionais de análise (só mudam se o cliente marcar o consentimento no carrinho)
+        bairro: String(bruto.bairro || ""), faixaEtaria: String(bruto.faixaEtaria || ""),
+        comoConheceu: String(bruto.comoConheceu || ""), consentimentoAnalise: bruto.consentimentoAnalise === true
       };
     }
   } catch (erro) { /* ignora */ }
-  return { nome: "", telefone: "", endereco: "", referencia: "" };
+  return { nome: "", telefone: "", endereco: "", referencia: "", bairro: "", faixaEtaria: "", comoConheceu: "", consentimentoAnalise: false };
 }
 
 export function salvarCliente(dados) {

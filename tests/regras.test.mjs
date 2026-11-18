@@ -227,3 +227,33 @@ test("receita: só de produto que existe no restaurante, com custo válido", asy
   await assertFails(setDoc(recRef(db), recDados({ custoExtraMicro: -1 })));
   await assertFails(setDoc(recRef(db), recDados({ itens: "não é lista" })));
 });
+
+// ---------- Meus pedidos (cliente logado com o Google) ----------
+const CLIENTE_ANA = "clienteAna000000000000000001";
+const CLIENTE_BIA = "clienteBia000000000000000002";
+const meuPedidoRef = (db, uid = CLIENTE_ANA) => doc(db, "clientes", uid, "pedidos", PEDIDO);
+const meusPedidosRef = (db, uid = CLIENTE_ANA) => collection(db, "clientes", uid, "pedidos");
+
+test("meus pedidos: só o próprio cliente lê o seu índice (um a um e em lista)", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(meuPedidoRef(ctx.firestore()), { restauranteId: REST_A, numero: 1, totalCentavos: 1000 });
+  });
+  await assertSucceeds(getDoc(meuPedidoRef(como(CLIENTE_ANA))));
+  await assertSucceeds(getDocs(meusPedidosRef(como(CLIENTE_ANA))));
+  await assertFails(getDoc(meuPedidoRef(como(CLIENTE_BIA))));      // outro cliente
+  await assertFails(getDocs(meusPedidosRef(como(CLIENTE_BIA), CLIENTE_ANA)));
+  await assertFails(getDoc(meuPedidoRef(como(DONO_A))));            // nem o dono do restaurante
+  await assertFails(getDoc(meuPedidoRef(como(MESTRE))));            // nem o Mestre
+  await assertFails(getDoc(meuPedidoRef(anonimo())));
+  await assertFails(getDocs(meusPedidosRef(anonimo())));
+});
+
+test("meus pedidos: ninguém grava pelo navegador (só o servidor), nem o próprio cliente", async () => {
+  const falso = { restauranteId: REST_A, numero: 99, totalCentavos: 1 };
+  await assertFails(setDoc(meuPedidoRef(como(CLIENTE_ANA)), falso));
+  await assertFails(setDoc(meuPedidoRef(anonimo()), falso));
+  await assertFails(setDoc(meuPedidoRef(como(MESTRE)), falso));
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(meuPedidoRef(ctx.firestore()), falso); });
+  await assertFails(updateDoc(meuPedidoRef(como(CLIENTE_ANA)), { totalCentavos: 2 }));
+  await assertFails(deleteDoc(meuPedidoRef(como(CLIENTE_ANA))));
+});

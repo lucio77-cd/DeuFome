@@ -13,11 +13,11 @@
 
 const { FieldValue } = require("firebase-admin/firestore");
 const {
-  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano,
+  ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano, clienteDaRequisicao,
   ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
 } = require("./_comum");
 const { gravarResumo } = require("./_status");
-const { diaSP } = require("./_status-regras");
+const { diaSP, FAIXAS_ETARIAS, COMO_CONHECEU } = require("./_status-regras");
 const { normalizarCodigo, avaliarCupom } = require("./_cupom");
 
 const FUSO = "America/Sao_Paulo";
@@ -27,6 +27,7 @@ const PEDIDO_ID_RE = /^[A-Za-z0-9]{20,40}$/;
 const JANELA_MS = 10 * 60 * 1000;     // janela dos limites contra abuso
 const MAX_PEDIDOS_TELEFONE = 5;       // por telefone, a cada 10 minutos
 const MAX_PEDIDOS_IP = 12;            // por IP, a cada 10 minutos (vários clientes podem dividir o mesmo Wi-Fi)
+const MAX_PEDIDOS_CONTA = 5;          // por conta Google, a cada 10 minutos
 const JANELA_PENDENTES_MS = 30 * 60 * 1000;
 const MAX_NOVOS_PENDENTES = 15;       // pedidos "novos" sem resposta nos últimos 30 minutos
 const MAX_POR_ITEM = 20;
@@ -73,7 +74,27 @@ function contarJanela(snap, agora, maximo, mensagem) {
   return { janelaInicio, contagem };
 }
 
-async function criarPedido(db, corpo, ip) {
+// "Bairro" vira chave do mapa do resumo: sem acento, minúsculo, só letras, números e "_"
+function chaveDoBairro(nome) {
+  return nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+}
+
+// Dados de análise (bairro, faixa etária, como conheceu): todos opcionais e SÓ guardados se o cliente marcou o
+// consentimento. Sem "consentimento: true", nada disso é lido nem gravado.
+function lerAnalise(bruto) {
+  const a = bruto && typeof bruto === "object" ? bruto : {};
+  if (a.consentimento !== true) return { consentimento: false, analise: null };
+  const analise = {};
+  const bairro = texto(a.bairro, "bairro", 0, 40);
+  const chave = bairro ? chaveDoBairro(bairro) : "";
+  if (chave) { analise.bairro = bairro; analise.bairroChave = chave; }
+  if (FAIXAS_ETARIAS.includes(a.faixaEtaria)) analise.faixaEtaria = a.faixaEtaria;
+  if (COMO_CONHECEU.includes(a.comoConheceu)) analise.comoConheceu = a.comoConheceu;
+  return { consentimento: true, analise: Object.keys(analise).length ? analise : null };
+}
+
+async function criarPedido(db, corpo, ip, clienteUid) {
   // ----- Dados enviados pelo cliente (tudo é validado de novo aqui) -----
   const restauranteId = String(corpo.restauranteId || "");
   if (!ID_RE.test(restauranteId)) throw new ErroPedido(400, "Restaurante inválido.");
@@ -134,6 +155,15 @@ async function criarPedido(db, corpo, ip) {
     if (!codigoCupom) throw new ErroPedido(409, "Cupom inválido.", { codigo: "cupom_invalido" });
   }
 
+  const { consentimento, analise } = lerAnalise(corpo.analise);
+
+  // "Impressão" do conteúdo do pedido: um reenvio com a MESMA chave mas dados diferentes não pode devolver
+  // o pedido antigo como se fosse o novo (o navegador já troca a chave, isto é a defesa do servidor).
+  const assinatura = hash(JSON.stringify([
+    restauranteId, [...quantidades.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    nome, telefone, endereco, referencia, observacao, forma, trocoPara, codigoCupom, totalEsperado, consentimento, analise
+  ]));
+
   // ----- Referências -----
   const restRef = db.collection("restaurantes").doc(restauranteId);
   const pedidoRef = restRef.collection("pedidos").doc(pedidoId);
@@ -141,6 +171,9 @@ async function criarPedido(db, corpo, ip) {
   const contadorRef = restRef.collection("contadores").doc("pedidos");
   const limiteTelRef = db.collection("_limites").doc("tel_" + hash(telefone));
   const limiteIpRef = db.collection("_limites").doc("ip_" + hash(ip));
+  const limiteContaRef = db.collection("_limites").doc("uid_" + hash(clienteUid));
+  // Índice privado "Meus pedidos" do cliente (só o link do pedido; sem endereço nem telefone)
+  const indiceRef = db.collection("clientes").doc(clienteUid).collection("pedidos").doc(pedidoId);
   const produtoRefs = [...quantidades.keys()].map((id) => restRef.collection("produtos").doc(id));
   // Receitas (privadas) guardam o custo de cada produto; o custo é COPIADO para o pedido na hora da venda
   const receitaRefs = produtoRefs.map((ref) => restRef.collection("receitas").doc(ref.id));
@@ -148,8 +181,8 @@ async function criarPedido(db, corpo, ip) {
 
   // ----- Tudo em uma transação: lê preços atuais, confere regras e grava o pedido -----
   return db.runTransaction(async (t) => {
-    const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, ...outrosSnaps] =
-      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, ...produtoRefs, ...receitaRefs,
+    const [restSnap, pedidoSnap, contadorSnap, limiteTelSnap, limiteIpSnap, limiteContaSnap, ...outrosSnaps] =
+      await t.getAll(restRef, pedidoRef, contadorRef, limiteTelRef, limiteIpRef, limiteContaRef, ...produtoRefs, ...receitaRefs,
         ...(cupomRef ? [cupomRef] : []));
     const produtoSnaps = outrosSnaps.slice(0, produtoRefs.length);
     const receitaSnaps = outrosSnaps.slice(produtoRefs.length, produtoRefs.length * 2);
@@ -158,6 +191,13 @@ async function criarPedido(db, corpo, ip) {
     // Mesmo código de pedido enviado de novo (rede ruim): devolve o pedido já criado, sem duplicar
     if (pedidoSnap.exists) {
       const antigo = pedidoSnap.data();
+      // Outra conta usando a mesma chave, ou os dados mudaram: não devolve o pedido antigo
+      if (antigo.clienteUid && antigo.clienteUid !== clienteUid) {
+        throw new ErroPedido(409, "Código do pedido inválido. Recarregue a página.");
+      }
+      if (antigo.assinatura && antigo.assinatura !== assinatura) {
+        throw new ErroPedido(409, "Os dados do pedido mudaram. Toque em Enviar pedido de novo.", { codigo: "reenvio_diferente" });
+      }
       return { duplicado: true, pedidoId, numero: antigo.numero, totalCentavos: antigo.totalCentavos };
     }
 
@@ -175,6 +215,8 @@ async function criarPedido(db, corpo, ip) {
       "Muitos pedidos em pouco tempo. Aguarde alguns minutos e tente de novo.");
     const janelaIp = contarJanela(limiteIpSnap, agora, MAX_PEDIDOS_IP,
       "Muitos pedidos vindos desta conexão. Aguarde alguns minutos e tente de novo.");
+    const janelaConta = contarJanela(limiteContaSnap, agora, MAX_PEDIDOS_CONTA,
+      "Muitos pedidos desta conta em pouco tempo. Aguarde alguns minutos e tente de novo.");
 
     // Muitos pedidos "novos" sem resposta nos últimos 30 min: o restaurante não está dando conta
     // (ou alguém está inundando o painel). Só olha pedidos recentes, então testes antigos não travam nada.
@@ -269,6 +311,7 @@ async function criarPedido(db, corpo, ip) {
     t.set(contadorRef, { ultimo: numero });
     t.set(limiteTelRef, { janelaInicio: janelaTel.janelaInicio, contagem: janelaTel.contagem, atualizadoEm: FieldValue.serverTimestamp() });
     t.set(limiteIpRef, { janelaInicio: janelaIp.janelaInicio, contagem: janelaIp.contagem, atualizadoEm: FieldValue.serverTimestamp() });
+    t.set(limiteContaRef, { janelaInicio: janelaConta.janelaInicio, contagem: janelaConta.contagem, atualizadoEm: FieldValue.serverTimestamp() });
     // Soma o uso do cupom na MESMA transação (cancelar o pedido devolve o uso: veja _status.js)
     if (cupomRef) t.update(cupomRef, { usos: FieldValue.increment(1) });
 
@@ -295,6 +338,10 @@ async function criarPedido(db, corpo, ip) {
       pagamento: { forma, trocoParaCentavos: trocoPara },
       custoCompleto,
       custoTotalMicro,
+      clienteUid,                       // conta Google do cliente (só o UID: sem e-mail nem nome do Google)
+      assinatura,                       // impressão do conteúdo, para recusar reenvio com dados diferentes
+      consentimentoAnalise: consentimento,
+      analise,                          // { bairro, faixaEtaria, comoConheceu } ou null (só com consentimento)
       cancelamentoSolicitado: false,
       resumoContado: true,
       resumoDia,
@@ -302,6 +349,9 @@ async function criarPedido(db, corpo, ip) {
       atualizadoEm: FieldValue.serverTimestamp()
     });
     gravarResumo(t, restRef, { resumoContado: true, resumoDia }, { tipo: "criado" }, criadoEmData);
+    t.create(indiceRef, {
+      restauranteId, restauranteNome: rest.nome, numero, totalCentavos: total, criadoEm: FieldValue.serverTimestamp()
+    });
 
     // Acompanhamento público: sem telefone, sem endereço, sem observação
     t.create(acompRef, {
@@ -333,8 +383,9 @@ module.exports = async function handler(req, res) {
   }
   try {
     const db = iniciarFirebase();
+    const cliente = await clienteDaRequisicao(req); // sem login Google: 401 antes de qualquer leitura
     const corpo = lerCorpo(req);
-    const resultado = await criarPedido(db, corpo, ipDoCliente(req));
+    const resultado = await criarPedido(db, corpo, ipDoCliente(req), cliente.uid);
     if (!resultado.duplicado) {
       // Avisa o celular do restaurante (mesmo com o app fechado). Na Vercel, o aviso segue em segundo plano
       // enquanto o cliente já recebe a resposta; sem waitUntil, espera terminar antes de responder.

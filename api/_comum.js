@@ -81,6 +81,26 @@ async function usuarioDaRequisicao(req) {
   }
 }
 
+// ---------- Quem está pedindo (cliente) ----------
+// O cliente PRECISA estar logado com o Google (Firebase Auth) para fazer pedido: o navegador manda o token em
+// "Authorization: Bearer ...". Exigimos o provedor google.com e e-mail verificado, para não aceitar contas
+// anônimas nem as contas de e-mail/senha do painel. Devolve só o UID: e-mail e nome do Google NÃO são gravados nos pedidos.
+async function clienteDaRequisicao(req) {
+  const m = /^Bearer (.+)$/.exec(String((req.headers || {}).authorization || ""));
+  if (!m) throw new ErroPedido(401, "Entre com a sua conta Google para fazer o pedido.", { codigo: "login_necessario" });
+  let token;
+  try {
+    token = await getAuth().verifyIdToken(m[1]);
+  } catch (erro) {
+    throw new ErroPedido(401, "Sua sessão expirou. Entre de novo com o Google.", { codigo: "login_necessario" });
+  }
+  const provedor = token.firebase && token.firebase.sign_in_provider;
+  if (provedor !== "google.com" || token.email_verified !== true) {
+    throw new ErroPedido(403, "Para pedir, entre com uma conta Google.", { codigo: "login_necessario" });
+  }
+  return { uid: token.uid };
+}
+
 // Só o Mestre ou um membro ATIVO de um restaurante ATIVO pode agir naquele restaurante
 // (mesma regra de canManageRestaurant() em firestore.rules).
 async function exigirGestor(db, uid, restauranteId) {
@@ -183,6 +203,6 @@ async function limitarPorJanela(db, chave, maximo, janelaMs, mensagem) {
 
 module.exports = {
   ErroPedido, iniciarFirebase, hash, idPublicoDoPedido, emSegundoPlano, limitarPorJanela,
-  MASTER_UID, usuarioDaRequisicao, exigirGestor,
+  MASTER_UID, usuarioDaRequisicao, clienteDaRequisicao, exigirGestor,
   ipDoCliente, origemDe, texto, lerCorpo, moeda, enviarAviso
 };

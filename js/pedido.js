@@ -94,13 +94,15 @@ function desenhar(p) {
     || (status === STATUS_PEDIDO.PREPARANDO && p.cancelamentoSolicitado !== true);
   if (podeCancelar) {
     blocos.push(criar("button", {
-      class: "btn btn-perigo btn-bloco", type: "button", "data-cancelar": "1",
+      class: "btn btn-perigo btn-bloco", type: "button",
+      "data-cancelar": status === STATUS_PEDIDO.NOVO ? "cancelar" : "pedir", // "pedir": o restaurante decide
       texto: status === STATUS_PEDIDO.NOVO ? "Cancelar pedido" : "Pedir cancelamento"
     }));
   }
 
   blocos.push(
     criar("p", { class: "texto-suave centro", texto: "Guarde o endereço desta página (adicione aos favoritos) para acompanhar o pedido." }),
+    criar("a", { class: "btn btn-secundario btn-bloco", href: "/meus-pedidos", texto: "Meus pedidos" }),
     criar("a", { class: "btn btn-secundario btn-bloco", href: "/", texto: "Voltar ao início" })
   );
   conteudo.replaceChildren(...blocos);
@@ -110,7 +112,7 @@ function desenhar(p) {
 conteudo.addEventListener("click", (evento) => {
   const botao = evento.target.closest("button[data-cancelar]");
   if (!botao || !restauranteIdAtual || !pedidoIdAtual) return;
-  const pedirApenas = botao.textContent === "Pedir cancelamento";
+  const pedirApenas = botao.dataset.cancelar === "pedir";
   const pergunta = pedirApenas
     ? "O restaurante já está preparando o pedido. Quer pedir o cancelamento? Ele decide se consegue cancelar."
     : "Cancelar este pedido? Essa ação não pode ser desfeita.";

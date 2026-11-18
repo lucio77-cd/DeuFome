@@ -113,12 +113,17 @@ const mocks = {
       serverTimestamp: () => ({ __op: "ts" })
     }
   },
-  // O "token" do teste é o próprio UID. "invalido" simula sessão expirada.
+  // O "token" do teste é o próprio UID. "invalido" simula sessão expirada. Token que começa com "senha"
+  // simula login por e-mail/senha (conta do painel); os demais simulam login pelo Google.
+  // Token que começa com "naover" simula e-mail do Google NÃO verificado.
   "firebase-admin/auth": {
     getAuth: () => ({
       async verifyIdToken(token) {
         if (!token || token === "invalido") throw new Error("token inválido");
-        return { uid: token };
+        return {
+          uid: token, email_verified: !token.startsWith("naover"),
+          firebase: { sign_in_provider: token.startsWith("senha") ? "password" : "google.com" }
+        };
       }
     })
   },

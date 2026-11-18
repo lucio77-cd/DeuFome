@@ -3,6 +3,7 @@
 import { db } from "./firebase-config.js";
 import { $, criar, formatarMoeda, formatarTelefone, soDigitos, paraCentavos, telefoneValido, botaoDe, executar, mensagemErroFirebase } from "./utils.js";
 import { statusRestaurante } from "./cliente.js";
+import { aoMudarLogin, entrarComGoogle, sairDaConta, tokenDoCliente } from "./cliente-auth.js";
 import {
   lerCarrinho, alterarQuantidade, removerItem, limparCarrinho, substituirItens,
   subtotalCentavos, lerCliente, salvarCliente, novoPedidoId
@@ -18,6 +19,7 @@ let impressaoPendente = ""; // "foto" dos dados enviados com esse código: se mu
 // O desconto vem do SERVIDOR (/api/validar-cupom) e é conferido de novo ao enviar o pedido.
 let cupom = null;
 let versaoCupom = 0;         // descarta respostas antigas da conferência de cupom
+let usuario = null;          // conta Google do cliente (sem login não dá para enviar o pedido)
 
 function mostrarAviso(texto, tipo = "aviso") {
   avisos.replaceChildren(criar("p", { class: `mensagem ${tipo}`, texto }));
@@ -224,6 +226,37 @@ $("#nome").value = salvo.nome;
 $("#telefone").value = formatarTelefone(salvo.telefone);
 $("#endereco").value = salvo.endereco;
 $("#referencia").value = salvo.referencia;
+$("#bairro").value = salvo.bairro;
+$("#faixaEtaria").value = salvo.faixaEtaria;
+$("#comoConheceu").value = salvo.comoConheceu;
+$("#consentimento").checked = salvo.consentimentoAnalise;
+$("#blocoAnalise").classList.toggle("oculto", !salvo.consentimentoAnalise);
+$("#consentimento").addEventListener("change", (evento) => {
+  $("#blocoAnalise").classList.toggle("oculto", !evento.target.checked);
+});
+
+// ---------- Login com o Google ----------
+// Sem login o formulário nem aparece: o servidor também recusa pedido sem conta Google.
+function atualizarLogin(user) {
+  usuario = user;
+  $("#loginCliente").classList.toggle("oculto", !!user);
+  $("#pedidoForm").classList.toggle("oculto", !user);
+  if (!user) return;
+  $("#loginMsg").textContent = "";
+  $("#nomeGoogle").textContent = user.displayName || "sua conta Google";
+  if (!$("#nome").value.trim() && user.displayName) $("#nome").value = user.displayName.slice(0, 60);
+}
+$("#entrarGoogle").addEventListener("click", (evento) => {
+  executar(evento.currentTarget, async () => {
+    $("#loginMsg").textContent = "";
+    try {
+      await entrarComGoogle();
+    } catch (erro) {
+      $("#loginMsg").textContent = mensagemErroFirebase(erro);
+    }
+  });
+});
+$("#sairConta").addEventListener("click", () => { sairDaConta().catch(() => {}); });
 $("#telefone").addEventListener("input", (evento) => { evento.target.value = formatarTelefone(evento.target.value); });
 $("#pagamento").addEventListener("change", () => {
   $("#blocoTroco").classList.toggle("oculto", $("#pagamento").value !== "dinheiro");
@@ -238,6 +271,7 @@ async function enviar() {
   avisos.replaceChildren();
   const carrinho = lerCarrinho();
   if (!restaurante || !carrinho.itens.length) return;
+  if (!usuario) return mostrarAviso("Entre com o Google para enviar o pedido.", "erro");
   if (!statusRestaurante(restaurante).aberto) return erroNoFormulario("O restaurante está fechado no momento.");
 
   const nome = $("#nome").value.trim();
@@ -257,23 +291,36 @@ async function enviar() {
     if (trocoParaCentavos < totalAtual) return erroNoFormulario(`O troco precisa ser para ${formatarMoeda(totalAtual)} ou mais.`);
   }
 
+  // Dados opcionais de análise: só vão se o cliente marcou o consentimento (o servidor confere de novo)
+  const consentimento = $("#consentimento").checked;
+  const analise = consentimento
+    ? { consentimento: true, bairro: $("#bairro").value.trim(), faixaEtaria: $("#faixaEtaria").value, comoConheceu: $("#comoConheceu").value }
+    : { consentimento: false };
+
   // Reenvio após falha de rede reaproveita o código (não duplica). Mas se o cliente CORRIGIU algum dado
   // (endereço, pagamento, troco, cupom...), o servidor devolveria o pedido antigo com os dados velhos:
   // por isso, dado diferente = código novo.
   const impressao = JSON.stringify([
     carrinho.restauranteId, carrinho.itens.map((i) => [i.produtoId, i.quantidade]),
-    nome, telefone, endereco, referencia, observacao, forma, trocoParaCentavos, cupom ? cupom.codigo : "", totalAtual
+    nome, telefone, endereco, referencia, observacao, forma, trocoParaCentavos, cupom ? cupom.codigo : "", totalAtual, analise
   ]);
   if (!pedidoIdPendente || impressao !== impressaoPendente) {
     pedidoIdPendente = novoPedidoId();
     impressaoPendente = impressao;
   }
 
+  let token;
+  try {
+    token = await tokenDoCliente();
+  } catch (erro) {
+    return mostrarAviso("Sua sessão expirou. Entre de novo com o Google.", "erro");
+  }
+
   let resposta;
   try {
     resposta = await fetch("/api/criar-pedido", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         chave: pedidoIdPendente, // só evita duplicar no reenvio; o código do pedido vem do servidor na resposta
         restauranteId: carrinho.restauranteId,
@@ -282,6 +329,7 @@ async function enviar() {
         entrega: { endereco, referencia },
         observacao,
         pagamento: { forma, trocoParaCentavos },
+        analise,
         cupom: cupom ? cupom.codigo : undefined, // o servidor confere o cupom e calcula o desconto de novo
         totalEsperadoCentavos: totalAtual
       })
@@ -297,6 +345,10 @@ async function enviar() {
   if (!resposta.ok) {
     if (resposta.status >= 500) return erroNoFormulario(dados.erro || "O servidor não conseguiu registrar o pedido. Tente de novo em instantes.");
     pedidoIdPendente = null; // o servidor recusou: nada foi criado
+    if (dados.codigo === "login_necessario") {
+      sairDaConta().catch(() => {}); // sessão inválida: volta para a tela de entrar com o Google
+      return mostrarAviso(dados.erro || "Entre com o Google para enviar o pedido.", "erro");
+    }
     if (dados.codigo === "produto_indisponivel" && Array.isArray(dados.produtoIds)) {
       substituirItens(lerCarrinho().itens.filter((i) => !dados.produtoIds.includes(i.produtoId)));
       await atualizarDoServidor();
@@ -317,7 +369,11 @@ async function enviar() {
   }
 
   if (!dados.pedidoId) return erroNoFormulario("Resposta inesperada do servidor. Tente de novo.");
-  salvarCliente({ nome, telefone, endereco, referencia });
+  salvarCliente({
+    nome, telefone, endereco, referencia, consentimentoAnalise: consentimento,
+    bairro: consentimento ? $("#bairro").value.trim() : "", faixaEtaria: consentimento ? $("#faixaEtaria").value : "",
+    comoConheceu: consentimento ? $("#comoConheceu").value : ""
+  });
   limparCarrinho();
   location.assign(`/pedido?r=${encodeURIComponent(carrinho.restauranteId)}&p=${encodeURIComponent(dados.pedidoId)}`);
 }
@@ -327,4 +383,5 @@ $("#pedidoForm").addEventListener("submit", (evento) => {
   executar(botaoDe(evento), enviar);
 });
 
+aoMudarLogin(atualizarLogin);
 atualizarDoServidor().finally(() => $("#carregando").classList.add("oculto"));

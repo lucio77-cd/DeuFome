@@ -6,6 +6,9 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/f
 import { collection, documentId, getDocs, orderBy, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const ROTULO_PAGAMENTO = { pix: "Pix", dinheiro: "Dinheiro", cartao: "Cartão", outro: "Outro" };
+const ROTULO_SEMANA = { seg: "Seg", ter: "Ter", qua: "Qua", qui: "Qui", sex: "Sex", sab: "Sáb", dom: "Dom" };
+const ROTULO_FAIXA = { "18a24": "18 a 24 anos", "25a34": "25 a 34 anos", "35a44": "35 a 44 anos", "45a54": "45 a 54 anos", "55mais": "55 anos ou mais" };
+const ROTULO_ORIGEM = { indicacao: "Indicação", instagram: "Instagram", facebook: "Facebook", google: "Busca no Google", passou: "Passou na frente", outro: "Outro" };
 let carga = 0;
 let restauranteId = "";
 
@@ -43,6 +46,18 @@ function desenhar(t) {
   barras($("#graficoHoras"), t.horarios.map((h) => ({ valor: h.qtd, hora: h.hora, titulo: `${h.hora}h: ${h.qtd} pedidos` })), (i) => i.hora);
   lista($("#listaPagamentos"), "Formas de pagamento", Object.entries(t.pagamentos).sort((a, b) => b[1] - a[1]).map(([f, q]) => [ROTULO_PAGAMENTO[f] || f, `${q} entregas`]));
   lista($("#listaCupons"), "Cupons usados", Object.entries(t.cupons).sort((a, b) => b[1] - a[1]).map(([c, q]) => [c, `${q} entregas`]));
+
+  barras($("#graficoSemana"), t.diasSemana.map((d) => ({ valor: d.qtd, dia: d.dia, titulo: `${ROTULO_SEMANA[d.dia]}: ${d.qtd} pedidos` })), (i) => ROTULO_SEMANA[i.dia]);
+  lista($("#listaCombos"), "", t.topCombos.map((c) => [c.nomes, `${c.qtd}×`]));
+  if (!t.topCombos.length) $("#listaCombos").replaceChildren(criar("p", { class: "texto-suave", texto: "Ainda sem combinações no período." }));
+
+  // Perfil: só de quem marcou o consentimento (campos opcionais), por isso mostramos quantos entregues têm esses dados
+  $("#avisoPerfil").textContent = t.pedidosComAnalise
+    ? `Com base em ${t.pedidosComAnalise} de ${t.entregues} pedidos entregues cujos clientes informaram esses dados (opcional). Números somados, sem identificar ninguém.`
+    : "Ainda não há pedidos entregues com dados de perfil informados (é opcional para o cliente).";
+  lista($("#listaBairros"), "Bairros", t.topBairros.map((b) => [b.nome || "—", `${b.qtd} pedidos`]));
+  lista($("#listaFaixas"), "Faixa etária", t.faixas.map((f) => [ROTULO_FAIXA[f.faixa] || f.faixa, `${f.qtd} pedidos`]));
+  lista($("#listaOrigens"), "Como conheceram o restaurante", t.origens.map((o) => [ROTULO_ORIGEM[o.origem] || o.origem, `${o.qtd} pedidos`]));
 }
 
 async function carregar() {

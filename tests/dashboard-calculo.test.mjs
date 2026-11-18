@@ -32,3 +32,32 @@ test("intervalo de 7 dias", () => {
   assert.equal(fim, "2026-11-17");
   assert.equal(inicio, "2026-11-11");
 });
+
+test("perfil dos clientes, dias da semana e combinações somam entre os dias", () => {
+  const t = totalizar([
+    { id: "2026-11-02", pedidos: 3, entregues: 2, pedidosComAnalise: 2, porDiaSemana: { seg: 2, ter: 1 },
+      bairros: { centro: { nome: "Centro", qtd: 2 } }, faixasEtarias: { "25a34": 1, "18a24": 1 }, comoConheceu: { instagram: 2 },
+      combos: { a_b: { nomes: "X + Suco", qtd: 2 } } },
+    { id: "2026-11-03", pedidos: 2, entregues: 2, pedidosComAnalise: 1, porDiaSemana: { seg: 1, dom: 1 },
+      bairros: { centro: { nome: "Centro", qtd: 1 }, sao_jose: { nome: "São José", qtd: 4 } }, faixasEtarias: { "25a34": 1 },
+      comoConheceu: { indicacao: 4, instagram: 1 }, combos: { a_b: { nomes: "X + Suco", qtd: 1 }, a_c: { nomes: "X + Batata", qtd: 5 } } }
+  ]);
+  assert.equal(t.pedidosComAnalise, 3);
+  assert.deepEqual(t.diasSemana.map((d) => d.dia), ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]);
+  assert.equal(t.diasSemana.find((d) => d.dia === "seg").qtd, 3);
+  assert.equal(t.diasSemana.find((d) => d.dia === "qua").qtd, 0);
+  assert.deepEqual(t.topBairros, [{ nome: "São José", qtd: 4 }, { nome: "Centro", qtd: 3 }]);
+  assert.deepEqual(t.faixas, [{ faixa: "18a24", qtd: 1 }, { faixa: "25a34", qtd: 2 }]); // na ordem das idades
+  assert.deepEqual(t.origens, [{ origem: "indicacao", qtd: 4 }, { origem: "instagram", qtd: 3 }]);
+  assert.deepEqual(t.topCombos[0], { nomes: "X + Batata", qtd: 5 });
+  assert.equal(t.topCombos[1].qtd, 3);
+});
+
+test("resumos antigos (sem os campos novos) continuam funcionando", () => {
+  const t = totalizar([{ id: "2026-10-01", pedidos: 1, entregues: 1, faturamentoCentavos: 2000, porHora: { "12": 1 } }]);
+  assert.equal(t.pedidosComAnalise, 0);
+  assert.deepEqual(t.topBairros, []);
+  assert.deepEqual(t.topCombos, []);
+  assert.deepEqual(t.faixas, []);
+  assert.equal(t.diasSemana.every((d) => d.qtd === 0), true);
+});

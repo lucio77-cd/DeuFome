@@ -48,6 +48,18 @@ function pararEscuta() {
 // Um único AudioContext reaproveitado: criar um novo a cada pedido vaza recurso (o navegador limita a quantidade)
 let audio = null;
 
+// O navegador só libera som depois de um toque do usuário. Por isso preparamos o áudio no primeiro toque
+// em qualquer lugar do painel: assim o primeiro pedido do dia já toca (antes o primeiro bipe podia sair mudo).
+function liberarAudio() {
+  try {
+    const Contexto = window.AudioContext || window.webkitAudioContext;
+    if (!Contexto) return;
+    if (!audio) audio = new Contexto();
+    if (audio.state === "suspended") audio.resume();
+  } catch (erro) { /* sem áudio neste navegador */ }
+}
+["pointerdown", "keydown"].forEach((nome) => window.addEventListener(nome, liberarAudio, { passive: true }));
+
 function apitar() {
   try {
     const Contexto = window.AudioContext || window.webkitAudioContext;

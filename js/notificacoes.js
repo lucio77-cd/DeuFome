@@ -65,3 +65,14 @@ export async function desativar(restauranteId) {
   const token = await obterToken();
   await deleteDoc(doc(db, "restaurantes", restauranteId, "dispositivos", token));
 }
+
+// Ao SAIR da conta: tira este aparelho dos restaurantes da conta, senão ele continua recebendo "Novo pedido".
+// Melhor esforço: qualquer falha (sem rede, sem permissão) é ignorada e nunca impede a saída. Chamar ANTES do signOut.
+export async function removerAparelho(restauranteIds) {
+  try {
+    if (!restauranteIds.length || !(await suportado()) || permissao() !== "granted") return;
+    const token = await obterToken();
+    await Promise.all(restauranteIds.map((id) =>
+      deleteDoc(doc(db, "restaurantes", id, "dispositivos", token)).catch(() => {})));
+  } catch (erro) { /* melhor esforço */ }
+}

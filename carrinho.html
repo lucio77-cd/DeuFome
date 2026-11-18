@@ -38,13 +38,44 @@
       <div class="resumo-linha total"><span>Total</span><span id="total"></span></div>
     </section>
 
-    <form id="pedidoForm" class="card">
+    <section id="loginCliente" class="card centro oculto">
+      <h2>Entre para pedir</h2>
+      <p class="texto-suave">Para enviar o pedido, entre com a sua conta Google. Assim você acompanha e revê seus pedidos.</p>
+      <p id="loginMsg" class="mensagem erro" aria-live="polite"></p>
+      <button id="entrarGoogle" class="btn btn-bloco" type="button">Entrar com o Google</button>
+      <p class="texto-suave texto-pequeno" style="margin-top:10px">Usamos a conta só para identificar o pedido. <a href="/privacidade">Como tratamos seus dados</a></p>
+    </section>
+
+    <form id="pedidoForm" class="card oculto">
+      <p class="texto-suave texto-pequeno">Você entrou como <strong id="nomeGoogle"></strong> · <button id="sairConta" class="link-botao" type="button">Sair</button></p>
       <h2>Seus dados</h2>
       <div class="campo"><label for="nome">Nome</label><input id="nome" maxlength="60" autocomplete="name" required></div>
       <div class="campo"><label for="telefone">Telefone (com DDD)</label><input id="telefone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(49) 99999-9999" required></div>
       <div class="campo"><label for="endereco">Endereço de entrega</label><input id="endereco" maxlength="160" autocomplete="street-address" placeholder="Rua, número, bairro" required></div>
       <div class="campo"><label for="referencia">Ponto de referência (opcional)</label><input id="referencia" maxlength="80" placeholder="Ex.: portão azul, ao lado da padaria"></div>
       <div class="campo"><label for="observacao">Observação (opcional)</label><textarea id="observacao" rows="2" maxlength="200" placeholder="Ex.: sem cebola"></textarea></div>
+
+      <h2>Ajude o restaurante (opcional)</h2>
+      <label class="consentimento" for="consentimento">
+        <input id="consentimento" type="checkbox">
+        <span>Aceito informar bairro, faixa etária e como conheci o restaurante, para ele melhorar o atendimento e o cardápio. Sem marcar, nada disso é enviado. <a href="/privacidade">Saiba mais</a></span>
+      </label>
+      <div id="blocoAnalise" class="oculto">
+        <div class="campo"><label for="bairro">Bairro</label><input id="bairro" maxlength="40" autocomplete="off" placeholder="Ex.: Centro"></div>
+        <div class="campo"><label for="faixaEtaria">Faixa etária (para maiores de 18 anos)</label>
+          <select id="faixaEtaria">
+            <option value="">Prefiro não informar</option>
+            <option value="18a24">18 a 24 anos</option><option value="25a34">25 a 34 anos</option><option value="35a44">35 a 44 anos</option>
+            <option value="45a54">45 a 54 anos</option><option value="55mais">55 anos ou mais</option>
+          </select></div>
+        <div class="campo"><label for="comoConheceu">Como conheceu o restaurante?</label>
+          <select id="comoConheceu">
+            <option value="">Prefiro não informar</option>
+            <option value="indicacao">Indicação de amigo ou família</option><option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option><option value="google">Busca no Google</option>
+            <option value="passou">Passei na frente</option><option value="outro">Outro</option>
+          </select></div>
+      </div>
 
       <h2>Pagamento na entrega</h2>
       <div class="campo">
@@ -66,5 +97,8 @@
     </form>
   </div>
 </main>
+<footer class="rodape texto-suave">
+  <a href="/meus-pedidos">Meus pedidos</a><a href="/privacidade">Privacidade</a>
+</footer>
 <script type="module" src="/js/carrinho-pagina.js"></script>
 </body></html>

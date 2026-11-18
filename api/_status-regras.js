@@ -12,6 +12,12 @@
 const FUSO = "America/Sao_Paulo";
 const MICRO_POR_CENTAVO = 10000;
 
+// Dados de análise que o cliente pode informar (sempre opcionais, com aviso e consentimento).
+// Faixa etária só a partir de 18 anos: o app não coleta idade de menores.
+const FAIXAS_ETARIAS = ["18a24", "25a34", "35a44", "45a54", "55mais"];
+const COMO_CONHECEU = ["indicacao", "instagram", "facebook", "google", "passou", "outro"];
+const MAX_PRODUTOS_NAS_COMBINACOES = 8; // 8 produtos diferentes geram no máximo 28 pares por pedido
+
 const STATUS = ["novo", "preparando", "saiu_para_entrega", "entregue", "cancelado"];
 const TRANSICOES = {
   novo: ["preparando", "cancelado"],
@@ -38,6 +44,14 @@ function horaSP(data) {
   return String(Number(parte.value)).padStart(2, "0");
 }
 
+const DIAS_SEMANA = { Sun: "dom", Mon: "seg", Tue: "ter", Wed: "qua", Thu: "qui", Fri: "sex", Sat: "sab" };
+const formatoSemana = new Intl.DateTimeFormat("en-US", { timeZone: FUSO, weekday: "short" });
+
+// "dom", "seg", "ter", "qua", "qui", "sex" ou "sab" no horário de Brasília
+function diaSemanaSP(data) {
+  return DIAS_SEMANA[formatoSemana.format(data)] || "seg";
+}
+
 const inteiro = (n) => (Number.isFinite(n) ? Math.round(n) : 0);
 
 // Custo do pedido, se TODOS os itens têm custo conhecido (senão null: não entra na margem)
@@ -56,7 +70,7 @@ function custoCompletoMicro(pedido) {
 // evento: { tipo: "criado", data: Date } | { tipo: "status", para: "entregue" | "cancelado" }
 function deltaResumo(pedido, evento) {
   if (evento.tipo === "criado") {
-    return { pedidos: 1, porHora: { [horaSP(evento.data)]: 1 } };
+    return { pedidos: 1, porHora: { [horaSP(evento.data)]: 1 }, porDiaSemana: { [diaSemanaSP(evento.data)]: 1 } };
   }
   if (evento.tipo !== "status") return null;
 
@@ -92,6 +106,25 @@ function deltaResumo(pedido, evento) {
     atual.receitaCentavos += inteiro(i.subtotalCentavos);
     delta.produtos[i.produtoId] = atual;
   }
+  // Combinações: quais produtos diferentes saem juntos no mesmo pedido (pares; a chave junta os dois códigos)
+  const distintos = Object.entries(delta.produtos).slice(0, MAX_PRODUTOS_NAS_COMBINACOES)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  for (let a = 0; a < distintos.length; a++) {
+    for (let b = a + 1; b < distintos.length; b++) {
+      delta.combos = delta.combos || {};
+      delta.combos[`${distintos[a][0]}_${distintos[b][0]}`] = { nomes: `${distintos[a][1].nome} + ${distintos[b][1].nome}`, qtd: 1 };
+    }
+  }
+  // Perfil do cliente: só entra se ele deu consentimento no pedido (campos opcionais)
+  const analise = pedido.consentimentoAnalise === true && pedido.analise && typeof pedido.analise === "object" ? pedido.analise : null;
+  if (analise) {
+    delta.pedidosComAnalise = 1;
+    if (typeof analise.bairroChave === "string" && /^[a-z0-9_]{1,30}$/.test(analise.bairroChave)) {
+      delta.bairros = { [analise.bairroChave]: { nome: String(analise.bairro || "").slice(0, 40), qtd: 1 } };
+    }
+    if (FAIXAS_ETARIAS.includes(analise.faixaEtaria)) delta.faixasEtarias = { [analise.faixaEtaria]: 1 };
+    if (COMO_CONHECEU.includes(analise.comoConheceu)) delta.comoConheceu = { [analise.comoConheceu]: 1 };
+  }
   const custo = custoCompletoMicro(pedido);
   if (custo !== null) {
     delta.pedidosComCusto = 1;
@@ -113,5 +146,6 @@ function paraIncrementos(objeto, incrementar) {
 }
 
 module.exports = {
-  FUSO, MICRO_POR_CENTAVO, STATUS, transicaoValida, diaSP, horaSP, custoCompletoMicro, deltaResumo, paraIncrementos
+  FUSO, MICRO_POR_CENTAVO, STATUS, FAIXAS_ETARIAS, COMO_CONHECEU, transicaoValida, diaSP, horaSP, diaSemanaSP,
+  custoCompletoMicro, deltaResumo, paraIncrementos
 };

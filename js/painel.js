@@ -4,6 +4,7 @@
 
 import { auth, db } from "./firebase-config.js";
 import { $, criar, botaoDe, executar, mensagemErroFirebase, paraCentavos, centavosParaTexto, formatarMoeda, toast } from "./utils.js";
+import { removerAparelho } from "./notificacoes.js";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -71,7 +72,18 @@ $("#loginForm").addEventListener("submit", (evento) => {
   });
 });
 
-$("#sair").addEventListener("click", () => signOut(auth));
+// Ao sair, tira este aparelho dos avisos de pedido (no máximo 4 segundos de espera: nunca trava a saída)
+$("#sair").addEventListener("click", async () => {
+  const usuarioAtual = auth.currentUser;
+  if (usuarioAtual) {
+    const limpar = (async () => {
+      const vinculos = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "restaurantes"));
+      await removerAparelho(vinculos.docs.map((d) => d.id));
+    })().catch(() => {});
+    await Promise.race([limpar, new Promise((resolve) => setTimeout(resolve, 4000))]);
+  }
+  signOut(auth);
+});
 
 onAuthStateChanged(auth, async (user) => {
   const minha = ++carga;

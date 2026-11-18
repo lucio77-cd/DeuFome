@@ -39,7 +39,7 @@ const corpoPedido = (chave = chaveDe(1), extra = {}) => ({
 });
 
 async function novoPedido(n = 1) {
-  const r = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(n)), ip: `10.0.0.${n}` });
+  const r = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(n)), ip: `10.0.0.${n}`, token: `cli${n}` });
   assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
   return r.corpo.pedidoId;
 }
@@ -71,8 +71,8 @@ test("criar pedido: gera código de 32 caracteres, grava pedido, acompanhamento 
 });
 
 test("reenviar a mesma chave não duplica o pedido nem o resumo", async () => {
-  const a = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1)), ip: "10.0.0.1" });
-  const b = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1)), ip: "10.0.0.1" });
+  const a = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1)), ip: "10.0.0.1", token: "cli1" });
+  const b = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1)), ip: "10.0.0.1", token: "cli1" });
   assert.equal(a.codigo, 201);
   assert.equal(b.codigo, 200);
   assert.equal(b.corpo.duplicado, true);
@@ -81,7 +81,7 @@ test("reenviar a mesma chave não duplica o pedido nem o resumo", async () => {
 });
 
 test("preço adulterado no navegador é recusado (409) e nada é gravado", async () => {
-  const r = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1), { totalEsperadoCentavos: 100 }), ip: "10.0.0.1" });
+  const r = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1), { totalEsperadoCentavos: 100 }), ip: "10.0.0.1", token: "cli1" });
   assert.equal(r.codigo, 409);
   assert.equal(r.corpo.codigo, "preco_mudou");
   assert.equal(r.corpo.totalCentavos, 4100);
@@ -273,7 +273,7 @@ const usos = () => banco.ler(`${R}/cupons/PROMO10`).usos;
 const pedidosGravados = () => banco.caminhos().filter((c) => c.startsWith(`${R}/pedidos/`)).length;
 // Subtotal 3600 (2 x 1500 + 600) + entrega 500. Com 10%: 3600 - 360 + 500 = 3740.
 const comCupom = (n, extra = {}, total = 3740) => chamar(criarPedido, {
-  corpo: corpoPedido(chaveDe(n), { cupom: "promo10", totalEsperadoCentavos: total, ...extra }), ip: `10.0.1.${n}`
+  corpo: corpoPedido(chaveDe(n), { cupom: "promo10", totalEsperadoCentavos: total, ...extra }), ip: `10.0.1.${n}`, token: `cli${n}`
 });
 
 test("cupom percentual: servidor calcula o desconto, grava no pedido e soma 1 uso", async () => {
@@ -445,4 +445,110 @@ test("validar-cupom: depois de 20 tentativas em 10 minutos o mesmo IP é bloquea
   assert.equal(r.codigo, 429);
   const outro = await chamar(validarCupom, { corpo, ip: "8.8.8.8" }); // outro IP não é afetado
   assert.equal(outro.codigo, 409);
+});
+
+// ---------- Login Google obrigatório, dados de análise e "Meus pedidos" ----------
+const pedirComo = (token, n, extra = {}) =>
+  chamar(criarPedido, { corpo: corpoPedido(chaveDe(n), extra), ip: `10.9.${n}.1`, token });
+const pedidosCriados = () => banco.caminhos().filter((c) => c.startsWith(`${R}/pedidos/`)).length;
+
+test("criar pedido exige login Google: sem token, sessão expirada, e-mail/senha e e-mail não verificado são recusados", async () => {
+  const sem = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(1)), ip: "10.9.0.1" });
+  assert.equal(sem.codigo, 401);
+  assert.equal(sem.corpo.codigo, "login_necessario");
+  assert.equal((await pedirComo("invalido", 1)).codigo, 401);   // sessão expirada
+  const senha = await pedirComo("senha-dono", 1);               // conta do painel (e-mail/senha), não é Google
+  assert.equal(senha.codigo, 403);
+  assert.equal(senha.corpo.codigo, "login_necessario");
+  assert.equal((await pedirComo("naover-ana", 1)).codigo, 403); // e-mail do Google não verificado
+  assert.equal(pedidosCriados(), 0);
+  assert.equal(resumo(), undefined);
+});
+
+test("pedido guarda só o UID do cliente, cria o índice 'Meus pedidos' e o acompanhamento público não tem o UID", async () => {
+  const r = await pedirComo("cliAna", 1);
+  assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
+  const id = r.corpo.pedidoId;
+  assert.equal(pedidoDoc(id).clienteUid, "cliAna");
+  assert.equal(pedidoDoc(id).cliente.email, undefined); // e-mail do Google não é guardado
+  assert.equal(acompDoc(id).clienteUid, undefined);
+  const indice = banco.ler(`clientes/cliAna/pedidos/${id}`);
+  assert.deepEqual({ ...indice, criadoEm: undefined }, {
+    restauranteId: "r1", restauranteNome: "Lanchonete Teste", numero: 1, totalCentavos: 4100, criadoEm: undefined
+  });
+  assert.equal(indice.entrega, undefined); // sem endereço nem telefone no índice
+  assert.equal(banco.ler(`clientes/outraPessoa/pedidos/${id}`), undefined);
+});
+
+test("análise: com consentimento grava bairro, faixa etária e origem; no 'entregue' entra no resumo (e combinações)", async () => {
+  const analise = { consentimento: true, bairro: "  São José ", faixaEtaria: "25a34", comoConheceu: "instagram" };
+  const r = await pedirComo("cli1", 1, { analise });
+  assert.equal(r.codigo, 201, JSON.stringify(r.corpo));
+  const id = r.corpo.pedidoId;
+  assert.deepEqual(pedidoDoc(id).analise, { bairro: "São José", bairroChave: "sao_jose", faixaEtaria: "25a34", comoConheceu: "instagram" });
+  assert.equal(pedidoDoc(id).consentimentoAnalise, true);
+  assert.equal(resumo().pedidosComAnalise, undefined); // só conta quando o pedido é entregue
+  assert.equal(Object.values(resumo().porDiaSemana).reduce((a, b) => a + b, 0), 1);
+
+  await ate(id, "preparando", "saiu_para_entrega", "entregue");
+  const s = resumo();
+  assert.equal(s.pedidosComAnalise, 1);
+  assert.deepEqual(s.bairros, { sao_jose: { nome: "São José", qtd: 1 } });
+  assert.deepEqual(s.faixasEtarias, { "25a34": 1 });
+  assert.deepEqual(s.comoConheceu, { instagram: 1 });
+  assert.deepEqual(s.combos, { p1_p2: { nomes: "X-Salada + Suco", qtd: 1 } });
+});
+
+test("análise: sem marcar o consentimento, nada é gravado mesmo que o navegador mande os campos", async () => {
+  const r = await pedirComo("cli1", 1, { analise: { consentimento: false, bairro: "Centro", faixaEtaria: "25a34", comoConheceu: "google" } });
+  assert.equal(r.codigo, 201);
+  assert.equal(pedidoDoc(r.corpo.pedidoId).analise, null);
+  assert.equal(pedidoDoc(r.corpo.pedidoId).consentimentoAnalise, false);
+  await ate(r.corpo.pedidoId, "preparando", "saiu_para_entrega", "entregue");
+  assert.equal(resumo().pedidosComAnalise, undefined);
+  assert.equal(resumo().bairros, undefined);
+});
+
+test("análise: faixa etária de menor de idade e origem inventada são descartadas; bairro enorme é recusado", async () => {
+  const r = await pedirComo("cli1", 1, { analise: { consentimento: true, faixaEtaria: "ate17", comoConheceu: "hack", bairro: "Centro" } });
+  assert.equal(r.codigo, 201);
+  assert.deepEqual(pedidoDoc(r.corpo.pedidoId).analise, { bairro: "Centro", bairroChave: "centro" });
+  const enorme = await pedirComo("cli2", 2, { analise: { consentimento: true, bairro: "x".repeat(41) } });
+  assert.equal(enorme.codigo, 400);
+});
+
+test("reenvio com a MESMA chave e dados DIFERENTES é recusado (409) em vez de devolver o pedido antigo", async () => {
+  const a = await pedirComo("cli1", 1);
+  assert.equal(a.codigo, 201);
+  const b = await pedirComo("cli1", 1, { entrega: { endereco: "Rua B, 99", referencia: "" } });
+  assert.equal(b.codigo, 409);
+  assert.equal(b.corpo.codigo, "reenvio_diferente");
+  assert.equal(pedidoDoc(a.corpo.pedidoId).entrega.endereco, "Rua A, 10"); // o pedido original continua como estava
+  assert.equal(pedidosCriados(), 1);
+  const igual = await pedirComo("cli1", 1); // o reenvio idêntico continua devolvendo o mesmo pedido
+  assert.equal(igual.codigo, 200);
+  assert.equal(igual.corpo.duplicado, true);
+});
+
+test("outra conta usando a chave de um pedido existente não recebe o pedido dos outros", async () => {
+  const a = await pedirComo("cliAna", 1);
+  assert.equal(a.codigo, 201);
+  const b = await pedirComo("cliBia", 1);
+  assert.equal(b.codigo, 409);
+  assert.equal(b.corpo.pedidoId, undefined);
+  assert.equal(banco.ler(`clientes/cliBia/pedidos/${a.corpo.pedidoId}`), undefined);
+});
+
+test("limite por conta: a mesma conta Google não faz mais de 5 pedidos em 10 minutos, mesmo trocando IP e telefone", async () => {
+  let codigos = [];
+  for (let n = 1; n <= 7; n++) {
+    const r = await chamar(criarPedido, {
+      corpo: corpoPedido(chaveDe(n), { cliente: { nome: "Ana Silva", telefone: `(49) 9999-000${n}` } }),
+      ip: `10.8.${n}.1`, token: "cliSpam"
+    });
+    codigos.push(r.codigo);
+  }
+  assert.deepEqual(codigos, [201, 201, 201, 201, 201, 429, 429]);
+  const outra = await chamar(criarPedido, { corpo: corpoPedido(chaveDe(20)), ip: "10.8.20.1", token: "cliOutra" });
+  assert.equal(outra.codigo, 201); // outra conta não é afetada
 });

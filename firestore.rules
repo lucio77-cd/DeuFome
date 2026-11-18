@@ -19,6 +19,7 @@ rules_version = '2';
 //   restaurantes/{id}/dispositivos/{token} aparelhos do restaurante para push (o servidor lê; o painel grava)
 //   restaurantes/{id}/contadores/...       número sequencial dos pedidos (só o servidor; negado aqui)
 //   usuarios/{uid}/restaurantes/{id}       índice privado de vínculos (escrito só pelo Mestre)
+//   clientes/{uid}/pedidos/{id}            "Meus pedidos" do cliente logado com o Google (só o servidor grava; só o dono lê)
 //   _limites/...                           controle de abuso do servidor (negado aqui)
 //
 // Pedido completo: só o restaurante/Mestre lê (get e list). O cliente acompanha pelo documento
@@ -252,6 +253,13 @@ service cloud.firestore {
     match /usuarios/{uid}/restaurantes/{restauranteId} {
       allow read: if isMaster() || (signedIn() && request.auth.uid == uid);
       allow create, update, delete: if isMaster();
+    }
+
+    // ---------- Meus pedidos (cliente logado com o Google) ----------
+    // Só o link do pedido (restaurante, número, total, data): sem telefone nem endereço. Gravado só pelo servidor.
+    match /clientes/{uid}/pedidos/{pedidoId} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // ---------- Diagnóstico (teste de escrita do Mestre) ----------

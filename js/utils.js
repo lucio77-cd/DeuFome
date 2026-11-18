@@ -146,6 +146,9 @@ export function mensagemErroFirebase(erro) {
     "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente de novo.",
     "auth/network-request-failed": "Sem conexão com a internet.",
     "auth/invalid-api-key": "apiKey inválida em js/firebase-config.js.",
+    "auth/popup-blocked": "O navegador bloqueou a janela de login. Permita pop-ups para este site e tente de novo.",
+    "auth/operation-not-allowed": "O login com Google ainda não foi ativado no Firebase (Authentication > Sign-in method).",
+    "auth/unauthorized-domain": "Este endereço do site não está autorizado no Firebase (Authentication > Settings > Authorized domains).",
     "permission-denied": "Sem permissão (verifique as regras do Firestore).",
     "unavailable": "Serviço indisponível ou sem internet.",
     "not-found": "Registro não encontrado."

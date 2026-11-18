@@ -66,9 +66,19 @@ Ainda não inclui: pagamento online e captcha contra pedidos falsos (veja `PLANO
 - Pedido cancelado (pelo restaurante ou pelo cliente) **devolve o uso** do cupom.
 - Cupons são privados; o restaurante edita as regras mas não consegue alterar o contador de usos (só o servidor).
 
+## Etapa 8 — Conta do cliente (Google) e dados para análise
+
+- **Login Google obrigatório para pedir.** `js/cliente-auth.js` usa um app Firebase separado ("cliente"), então a sessão do cliente não derruba a do dono no mesmo navegador. O servidor (`api/_comum.js › clienteDaRequisicao`) só aceita token do provedor `google.com` com e-mail verificado; guarda no pedido só o `clienteUid` (sem e-mail nem nome do Google).
+- **Meus pedidos** (`/meus-pedidos`): lê o índice privado `clientes/{uid}/pedidos/{id}`, gravado só pelo servidor ao criar o pedido (sem telefone nem endereço).
+- **Dados para análise, sempre opcionais e só com consentimento marcado no carrinho:** bairro, faixa etária (só maiores de 18) e como conheceu o restaurante. O servidor ignora tudo se `consentimento` não for `true`. Dia da semana, horário e combinações de produtos são calculados dos próprios pedidos.
+- Os números entram no **resumo diário** quando o pedido é **entregue** e aparecem em `/painel/dashboard` (dias da semana, combinações, perfil). O restaurante vê contagens somadas, não a ficha de cada cliente.
+- **Limites:** além de telefone e IP, agora também por conta Google (5 pedidos a cada 10 minutos).
+- `privacidade.html`: aviso de privacidade (texto inicial do beta; revisar antes de abrir ao público).
+- Pagamento continua **na entrega** (dinheiro, cartão na maquininha, Pix). Pagamento online é uma etapa futura.
+
 ## Configuração necessária
 
-1. Em Authentication → Sign-in method, ative E-mail/senha.
+1. Em Authentication → Sign-in method, ative **E-mail/senha** (donos de restaurante) e **Google** (clientes: sem isso ninguém consegue enviar pedido). Ao ativar o Google, escolha o e-mail de suporte do projeto.
 2. Em Authentication → Users, crie a conta do responsável por cada restaurante. Copie o UID e cole no painel Mestre.
 3. **Publique o conteúdo de `firestore.rules`** (`firebase deploy --only firestore:rules`, usando o `firebase.json` do projeto, ou colando em Firestore Database → Regras). Sempre que o código mudar, publique as regras junto. **Ordem importante:** primeiro o deploy do código (Vercel), depois as regras. As regras atuais negam a mudança de status direto pelo navegador; se forem publicadas antes do código novo, o painel antigo para de mudar status.
 4. Confira se o UID Mestre em `js/firebase-config.js` (`MASTER_UID`) e em `firestore.rules` (função `isMaster()`) corresponde à conta principal.
@@ -147,6 +157,7 @@ Preço até R$ 10.000,00, taxa de entrega até R$ 1.000,00, horários no formato
 - `api/_comum.js`, `api/_id-pedido.js`, `api/_status.js`, `api/_status-regras.js`, `api/_cupom.js` — utilidades, código público do pedido, resumo diário e regras de cupom (o `_` impede a Vercel de expor como endereço).
 - `painel/custos.html`, `painel/cupons.html`, `painel/dashboard.html` — custos, cupons e resultados. `js/custos.js`, `js/custo-calculo.js`, `js/cupons.js`, `js/dashboard.js`, `js/dashboard-calculo.js`.
 - `CHECKLIST-BETA.md`, `PLANO-PAGO.md` — roteiro do beta e o que muda ao ativar o plano pago.
+- `js/cliente-auth.js`, `meus-pedidos.html`, `js/meus-pedidos.js`, `privacidade.html` — login Google do cliente, histórico e aviso de privacidade.
 - `vercel.json` — Cabeçalhos de segurança (CSP sem script inline), URLs limpas e região das funções (`gru1`, São Paulo).
 
 > As páginas públicas usam caminhos absolutos (`/js/...`, `/css/...`), que funcionam com `cleanUrls` e sem barra final. Os painéis `admin/` e `painel/` carregam os scripts com `../js/...`, e os links para `/painel/pedidos` são absolutos pelo mesmo motivo.

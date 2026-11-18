@@ -29,7 +29,7 @@ function semear() {
 }
 
 const pedir = (n, itens, extra = {}, pagamento = "pix") => chamar(criarPedido, {
-  ip: `10.1.${n}.1`,
+  ip: `10.1.${n}.1`, token: `cli${n}`,
   corpo: {
     restauranteId: "r1", chave: chave(n), itens,
     cliente: { nome: `Cliente ${n}`, telefone: `(49) 98${String(1000000 + n)}` },
@@ -99,7 +99,7 @@ test("ataque: mesmo telefone pedindo em sequência é barrado; pedido com restau
   const itens = [{ produtoId: "p2", quantidade: 1 }];
   let barrado = 0;
   for (let n = 1; n <= 8; n++) {
-    const r = await chamar(criarPedido, { ip: `10.2.${n}.1`, corpo: {
+    const r = await chamar(criarPedido, { ip: `10.2.${n}.1`, token: `troll${n}`, corpo: {
       restauranteId: "r1", chave: chave(100 + n), itens, cliente: { nome: "Troll", telefone: "(49) 90000-0000" },
       entrega: { endereco: "Rua X, 1", referencia: "" }, observacao: "", pagamento: { forma: "pix" }, totalEsperadoCentavos: 1100 } });
     if (r.codigo === 429) barrado++;
@@ -107,7 +107,7 @@ test("ataque: mesmo telefone pedindo em sequência é barrado; pedido com restau
   assert.ok(barrado >= 3, `esperava bloqueio por telefone, bloqueou ${barrado}`);
 
   banco.gravar(R, { aberto: false }, true);
-  const fechado = await chamar(criarPedido, { ip: "10.3.3.3", corpo: {
+  const fechado = await chamar(criarPedido, { ip: "10.3.3.3", token: "ana", corpo: {
     restauranteId: "r1", chave: chave(200), itens, cliente: { nome: "Ana", telefone: "(49) 98888-7777" },
     entrega: { endereco: "Rua Y, 2", referencia: "" }, observacao: "", pagamento: { forma: "pix" }, totalEsperadoCentavos: 1100 } });
   assert.ok(fechado.codigo >= 400 && fechado.codigo < 500);
