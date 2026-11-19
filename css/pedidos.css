@@ -37,7 +37,7 @@
 .etapa.atual::before { background: var(--cor-primaria); border-color: var(--cor-primaria); }
 
 /* Painel de pedidos (restaurante) */
-.pedido-cartao.pedido-novo { border-color: var(--cor-primaria); box-shadow: 0 0 0 2px rgba(232, 69, 30, .18); }
+.pedido-cartao.pedido-novo { border-color: var(--cor-primaria); box-shadow: 0 0 0 2px rgba(245, 106, 18, .18); }
 .pedido-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .pedido-cartao p { margin: 8px 0; overflow-wrap: anywhere; }
 .pedido-itens { margin: 8px 0; padding-left: 20px; }

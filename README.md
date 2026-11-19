@@ -1,4 +1,4 @@
-# Deu Fome 🍔
+# Deu Fome
 
 Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída com HTML, CSS e JavaScript modular, Firebase Authentication, Firestore e Vercel (com uma função serverless para criar pedidos).
 

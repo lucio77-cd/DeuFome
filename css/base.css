@@ -1,20 +1,30 @@
 /* Deu Fome — estilos base (mobile-first) */
 
+/* Tipografia da marca: Poppins (licença OFL), servida pelo próprio site. Se não carregar, cai na fonte do sistema. */
+@font-face { font-family: "Poppins"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/poppins-400.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/poppins-500.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 700; font-style: normal; font-display: swap; src: url("/fonts/poppins-700.woff2") format("woff2"); }
+
 :root {
-  --cor-primaria: #e8451e;
-  --cor-primaria-escura: #c23512;
-  --cor-destaque: #ffb703;
-  --cor-fundo: #fff8f3;
-  --cor-superficie: #ffffff;
-  --cor-texto: #2b2118;
-  --cor-texto-suave: #6f6258;
-  --cor-borda: #eadfd6;
+  /* Paleta da marca */
+  --cor-primaria: #F56A12;          /* laranja */
+  --cor-primaria-escura: #D9560A;   /* laranja no hover/pressionado */
+  --cor-primaria-texto: #BF4A05;    /* laranja para TEXTO sobre creme/branco (contraste legível) */
+  --cor-cafe: #35180F;              /* café */
+  --cor-creme: #FFF3DC;             /* creme */
+  --cor-destaque: #E9B949;          /* mostarda */
+  --cor-fundo: #FFF3DC;
+  --cor-superficie: #FFFCF6;
+  --cor-texto: #35180F;
+  --cor-texto-suave: #7A5A48;
+  --cor-borda: #EBD8B5;
   --cor-sucesso: #1f9d55;
-  --cor-erro: #d93025;
-  --cor-aviso: #e8a200;
-  --raio: 12px;
-  --sombra: 0 2px 10px rgba(43, 33, 24, 0.08);
-  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --cor-erro: #C62828;
+  --cor-aviso: #E9B949;
+  --raio: 10px;                     /* botões e campos: cantos moderados */
+  --raio-card: 8px;                 /* cards: discretos */
+  --sombra: 0 1px 2px rgba(53, 24, 15, 0.06);
+  --fonte: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -30,9 +40,9 @@ body {
   min-height: 100vh;
 }
 
-h1, h2, h3 { line-height: 1.2; margin: 0 0 0.5em; }
+h1, h2, h3 { line-height: 1.2; margin: 0 0 0.5em; font-weight: 700; }
 p { margin: 0 0 1em; }
-a { color: var(--cor-primaria); }
+a { color: var(--cor-primaria-texto); }
 img { max-width: 100%; display: block; }
 
 .container {
@@ -42,19 +52,41 @@ img { max-width: 100%; display: block; }
   padding: 16px;
 }
 
+/* Topo: laranja com a borda de baixo em linha orgânica (elemento da marca, usado só aqui e no divisor) */
 .topo {
+  position: relative;
   background: var(--cor-primaria);
   color: #fff;
-  padding: 14px 16px;
+  padding: 16px 16px 36px;
   text-align: center;
   font-weight: 700;
   font-size: 1.15rem;
+}
+.topo::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 22px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 44' preserveAspectRatio='none'%3E%3Cpath d='M0 26C220 -4 470 -6 720 18S1210 44 1440 8V44H0Z' fill='%23FFF3DC'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.topo .logo { height: 54px; width: auto; margin: 0 auto; }
+.topo-link { display: inline-block; line-height: 0; }
+/* Topo dos painéis: logotipo à esquerda, nome da área ao lado */
+.topo-painel { display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px 16px 32px; }
+.topo-painel .logo { height: 38px; margin: 0; flex: none; }
+.topo-painel .topo-secundario { border-left: 1px solid rgba(255, 255, 255, .55); padding-left: 14px; font-size: 1.02rem; font-weight: 600; opacity: 1; }
+
+/* Divisor de linha orgânica (elemento próprio da marca; use com moderação) */
+.divisor-organico {
+  height: 16px; margin: 10px 0 18px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 16' preserveAspectRatio='none'%3E%3Cpath d='M0 9C90 -3 170 -3 270 8S470 18 600 6' fill='none' stroke='%23F56A12' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 
 .card {
   background: var(--cor-superficie);
   border: 1px solid var(--cor-borda);
-  border-radius: var(--raio);
+  border-radius: var(--raio-card);
   box-shadow: var(--sombra);
   padding: 16px;
   margin-bottom: 14px;
@@ -73,15 +105,15 @@ img { max-width: 100%; display: block; }
   background: var(--cor-primaria);
   color: #fff;
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   transition: background 0.15s, opacity 0.15s;
 }
 .btn:hover { background: var(--cor-primaria-escura); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-secundario { background: transparent; color: var(--cor-primaria); border: 2px solid var(--cor-primaria); }
-.btn-secundario:hover { background: rgba(232, 69, 30, 0.08); }
+.btn-secundario { background: transparent; color: var(--cor-primaria-texto); border: 2px solid var(--cor-primaria); }
+.btn-secundario:hover { background: rgba(245, 106, 18, 0.10); }
 .btn-perigo { background: transparent; color: var(--cor-erro); border: 2px solid var(--cor-erro); }
 .btn-perigo:hover { background: rgba(217, 48, 37, .08); }
 .btn-bloco { display: flex; width: 100%; }
@@ -93,9 +125,9 @@ input, select, textarea {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--cor-borda);
+  border: 1px solid #DCC59B;
   border-radius: var(--raio);
-  background: #fff;
+  background: #FFFDF8;
   color: var(--cor-texto);
   font: inherit;
 }
@@ -117,7 +149,7 @@ input:focus, select:focus, textarea:focus {
 }
 .selo-ok { background: #d9f2e3; color: var(--cor-sucesso); }
 .selo-erro { background: #fde3e1; color: var(--cor-erro); }
-.selo-aviso { background: #fff1cc; color: #8a6100; }
+.selo-aviso { background: #F8E3A9; color: #5C3A06; }
 
 .texto-suave { color: var(--cor-texto-suave); }
 .centro { text-align: center; }
@@ -147,5 +179,5 @@ input:focus, select:focus, textarea:focus {
 }
 .toast-sucesso { background: var(--cor-sucesso); }
 .toast-erro { background: var(--cor-erro); }
-.toast-aviso { background: var(--cor-aviso); color: #2b2118; }
+.toast-aviso { background: var(--cor-aviso); color: var(--cor-cafe); }
 .toast.saindo { opacity: 0; transform: translateY(8px); }

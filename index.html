@@ -2,18 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#e8451e"><link rel="manifest" href="/manifest-cliente.webmanifest"><link rel="icon" href="/icone.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icones/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Deu Fome"><title>Deu Fome — Treze Tílias</title>
+  <meta name="theme-color" content="#F56A12"><link rel="manifest" href="/manifest-cliente.webmanifest"><link rel="icon" href="/icone.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icones/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Deu Fome"><title>Deu Fome — Treze Tílias</title>
   <meta name="description" content="Veja os restaurantes e cardápios de Treze Tílias.">
   <link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/cliente.css">
 </head>
 <body>
-<header class="topo"><a class="topo-link" href="/">🍔 Deu Fome</a></header>
+<header class="topo"><a class="topo-link" href="/" aria-label="Deu Fome, início"><img class="logo" src="/marca/logo.svg" alt="Deu Fome" width="75" height="54"></a></header>
 <main class="container cliente-container">
   <section class="hero">
     <h1>Deu Fome?</h1>
     <p class="texto-suave">Escolha um restaurante de Treze Tílias, monte seu pedido e receba em casa.</p>
     <span class="selo selo-aviso">Versão beta</span>
   </section>
+  <div class="divisor-organico" aria-hidden="true"></div>
   <div id="lista"><p class="texto-suave centro">Carregando restaurantes...</p></div>
   <button id="atualizar" class="btn btn-secundario btn-bloco" type="button">Atualizar</button>
   <noscript><p class="mensagem erro">Ative o JavaScript para ver os restaurantes.</p></noscript>
