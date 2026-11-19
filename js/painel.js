@@ -5,7 +5,7 @@
 import { auth, db } from "./firebase-config.js";
 import { $, criar, botaoDe, executar, mensagemErroFirebase, paraCentavos, centavosParaTexto, formatarMoeda, toast } from "./utils.js";
 import { removerAparelho } from "./notificacoes.js";
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Mesmos tetos do firestore.rules (em centavos)
@@ -59,6 +59,18 @@ function limparTela() {
 }
 
 // ---------- Login ----------
+$("#esqueciSenha").addEventListener("click", (evento) => {
+  const email = $("#email").value.trim();
+  const msg = $("#loginErro");
+  if (!email) { msg.textContent = "Digite seu e-mail acima e toque em \"Esqueci minha senha\"."; return; }
+  executar(evento.currentTarget, async () => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      msg.textContent = "Se esse e-mail tiver conta, enviamos um link para criar uma nova senha.";
+    } catch (erro) { msg.textContent = mensagemErroFirebase(erro); }
+  });
+});
+
 $("#loginForm").addEventListener("submit", (evento) => {
   evento.preventDefault();
   $("#loginErro").textContent = "";

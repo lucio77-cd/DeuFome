@@ -181,3 +181,6 @@ input:focus, select:focus, textarea:focus {
 .toast-erro { background: var(--cor-erro); }
 .toast-aviso { background: var(--cor-aviso); color: var(--cor-cafe); }
 .toast.saindo { opacity: 0; transform: translateY(8px); }
+
+.link-botao { background: none; border: 0; padding: 0; color: var(--cor-primaria-texto); text-decoration: underline; cursor: pointer; font: inherit; }
+.texto-pequeno { font-size: .85rem; }
