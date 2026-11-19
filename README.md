@@ -4,6 +4,7 @@ Plataforma beta de pedidos para restaurantes de Treze Tílias (SC), construída 
 
 ## Etapa 1 — Painéis e cardápio
 
+- Navegação do cliente: barra fixa embaixo (Início, Carrinho, Pedidos). Restaurante e administração **não têm link nas telas do cliente**: entre direto por `/painel` e `/admin`.
 - Área do Mestre (`/admin`): cadastra restaurantes, vincula o UID do responsável e desativa/reativa restaurantes.
 - Área do restaurante (`/painel`): configura nome, taxa, horário e se está aceitando pedidos.
 - Cardápio: categorias e produtos. Produto não é apagado: é **arquivado** (e pode ser restaurado), para não perder o histórico dos pedidos. Também dá para **pausar** um produto (indisponível) com um toque.

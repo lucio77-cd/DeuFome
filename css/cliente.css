@@ -59,3 +59,12 @@
 .conta-titulo { font-weight: 700; margin: 0 0 6px; }
 .conta-acoes { display: flex; gap: 10px; }
 .conta-acoes .btn { flex: 1; }
+
+/* Barra de navegação do cliente (fixa embaixo) */
+body.com-menu { padding-bottom: 76px; }
+.menu-cliente { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; background: var(--cor-superficie); border-top: 1px solid var(--cor-borda); padding-bottom: env(safe-area-inset-bottom); }
+.menu-cliente a { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px 8px; color: var(--cor-texto-suave); text-decoration: none; font-size: .75rem; font-weight: 500; }
+.menu-cliente a.ativa { color: var(--cor-primaria-texto); font-weight: 700; }
+.menu-selo { position: absolute; top: 4px; left: calc(50% + 4px); min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--cor-primaria); color: #fff; font-size: .7rem; line-height: 18px; text-align: center; }
+body.com-menu .barra-carrinho { bottom: 76px; }
+.rodape-privacidade { text-align: center; font-size: .85rem; padding: 8px 16px 12px; }
